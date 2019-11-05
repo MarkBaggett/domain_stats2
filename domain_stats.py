@@ -35,6 +35,7 @@ except Exception as e:
     print(str(e))
     print("You need to install the Python whois module.  Install PIP (https://bootstrap.pypa.io/get-pip.py).  Then 'pip install python-whois' ")
     sys.exit(0)
+    
 
 if os.system("which whois") != 0:
     print("You need to have whois installed on this machine.  Try 'apt install whois' ")
@@ -185,7 +186,7 @@ def local_whois_query(domain,timeout=0):
     try:
         submit_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         submit_socket.settimeout(15)
-        submit_socket.sendto(json.dumps(submit_data,default=dateconverter).encode(), ("127.0.0.1",8888))
+        submit_socket.sendto(json.dumps(submit_data,default=dateconverter).encode(), (config.server_name,config.server_port))
     except Exception as e:
         logging.debug(f"Error submitting data to server {str(e)}")
     return data
@@ -214,7 +215,7 @@ def domain_stats(domain):
             logging.info(f"making udp query {query}")
             udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             udp_socket.settimeout(15)
-            udp_socket.sendto(query, ("127.0.0.1", 8888))
+            udp_socket.sendto(query, (config.server_name,config.server_port))
             #Only a single packet but use loop incase there are new lines in the data
             resp, addr = udp_socket.recvfrom(32768)
             logging.info(f"udp repsponse {resp}")
@@ -321,6 +322,11 @@ def database_lookup(domain):
     return False
 
 if __name__ == "__main__":
+    try:
+       serverip = socket.gethostbyname(config.server_name)
+    except Exception as e:
+       print(f"Unable to resolve {config.server_name}") 
+
     #Setup the server.
     database_lock = threading.Lock()
     server = ThreadedDomainStats((config.local_address, config.local_port), domain_api)

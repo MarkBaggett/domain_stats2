@@ -78,7 +78,7 @@ def update_config(**set_attribs):
 
 def verify_domain(domain):
     parts = domain.split(".")
-    if parts[0] in 'co', 'com','ne','net','or','org','go','gov','ed','edu','ac','ad','gr','lg','mus','gouv']:
+    if parts[0] in [ 'co', 'com','ne','net','or','org','go','gov','ed','edu','ac','ad','gr','lg','mus','gouv']:
         return False
     try:
         resolved = socket.gethostbyname(domain)
