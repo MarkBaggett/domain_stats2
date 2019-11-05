@@ -3,8 +3,8 @@ database_file: domain_stats.db
 database_version: '0.3'
 local_address: 0.0.0.0
 local_port: 8000
-server_name: localhost
-server_port: 8888
+server_name: ec2-3-86-60-236.compute-1.amazonaws.com
+server_port: 4100
 supported_tlds:
 - com
 - edu

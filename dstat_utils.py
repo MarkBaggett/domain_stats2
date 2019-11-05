@@ -17,7 +17,7 @@ def get_creation_date(whois_record, debug=False):
     try:
         datetime_object = datetime.datetime.strptime(str(born_on), '%Y-%m-%d %H:%M:%S')
     except Exception as e:
-        if debug: print("Creation date parsing could not convert to timestamp. Falling to client query.", str(e))
+        if debug: print("Creation date parsing could not convert to tlimestamp. Falling to client query.", str(e))
         return False
     return datetime_object
 
@@ -77,6 +77,9 @@ def update_config(**set_attribs):
     return Configuration(**mutable_config)
 
 def verify_domain(domain):
+    parts = domain.split(".")
+    if parts[0] in 'co', 'com','ne','net','or','org','go','gov','ed','edu','ac','ad','gr','lg','mus','gouv']:
+        return False
     try:
         resolved = socket.gethostbyname(domain)
     except socket.gaierror as e:
