@@ -284,6 +284,10 @@ class domain_api(http.server.BaseHTTPRequestHandler):
             self.wfile.write(api_hlp.encode())
         return
 
+    def log_message(self, format, *args):
+        return
+
+
 
 class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
     def __init__(self, *args,**kwargs):
