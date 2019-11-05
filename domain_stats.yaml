@@ -1,6 +1,6 @@
 cached_max_items: 65536
 database_file: domain_stats.db
-database_version: '0.3'
+database_version: '0.1'
 local_address: 0.0.0.0
 local_port: 8000
 server_name: ec2-3-86-60-236.compute-1.amazonaws.com
@@ -12,4 +12,3 @@ supported_tlds:
 - net
 - org
 target_updates: https://raw.githubusercontent.com/MarkBaggett/domain_stats2/master/data
-

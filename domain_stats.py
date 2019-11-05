@@ -21,6 +21,7 @@ import collections
 import subprocess
 import functools
 import resource
+import pathlib
 import yaml
 from dstat_utils import reduce_domain, load_config, get_creation_date, verify_domain
 import logging
@@ -36,9 +37,15 @@ except Exception as e:
     print("You need to install the Python whois module.  Install PIP (https://bootstrap.pypa.io/get-pip.py).  Then 'pip install python-whois' ")
     sys.exit(0)
     
-
 if os.system("which whois") != 0:
     print("You need to have whois installed on this machine.  Try 'apt install whois' ")
+    sys.exit(0)
+
+config = load_config()
+
+dbpath = pathlib.Path().cwd() / config.database_file
+if not dbpath.exists():
+    print("No database was found. Try running database_admin.py --rebuild. To create it.")
     sys.exit(0)
 
 CacheRecord = collections.namedtuple("CacheRecord", 
@@ -304,8 +311,6 @@ class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
         self.exitthread = threading.Event()
         self.exitthread.clear()
         http.server.HTTPServer.__init__(self, *args, **kwargs)
-
-config = load_config()
 
 @my_lru_cache(maxsize = config.cached_max_items, cacheable = should_item_be_cached)
 def database_lookup(domain):
