@@ -129,7 +129,6 @@ def add_to_database( domain, seen_by_web, seen_by_us, seen_by_you, rank, other )
         result = cursor.execute(sql, (domain, seen_by_web, seen_by_us, seen_by_you, rank, other) )
         db.commit()
     except Exception as e:
-        import pdb;pdb.set_trace()
         logging.debug("Error occured writing to database. {}".format(str(e)))
     finally:
         database_lock.release()
