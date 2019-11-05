@@ -87,7 +87,9 @@ def verify_domain(domain):
             #print("No name error",domain)
             return True
         else: 
-            print("No dns name",odomain, domain, str(e))
+            print("No dns name", domain, str(e))
+            with open("dnserrors.log", mode="a") as fh:
+                fh.write(domain + "\n")
             return False
     return True
 
