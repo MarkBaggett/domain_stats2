@@ -71,7 +71,6 @@ def my_lru_cache(maxsize=16384, cacheable = lambda _:True):
             nonlocal _cache
             hit = miss = 0
 
-
         def remove(*args):
             nonlocal _cache
             if args in _cache:
@@ -141,15 +140,6 @@ def dateconverter(o):
     if isinstance(o, datetime.datetime):
         return o.strftime("%Y-%m-%d %H:%M:%S")
 
-def whois_to_cacherec(whois_record):
-    "Given txt record return a cacherecord"
-    domanrec = WhoisEntry.load(domain, whois_record)
-    today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    #creation_date = re.findall("Creation", whois_record)
-    creation_date = today
-    crec = CacheRecord(creation_date, today, today, -1, "{}")
-    return crec
-
 def cacherec_to_json(cacherecord):
     cache_dict = cacherecord._asdict()
     cache_json = json.dumps(cache_dict, default=dateconverter)
@@ -162,11 +152,6 @@ def cacherec_to_json(cacherecord):
 #        born_on = min(born_on)
 #    return born_on
 
-def load_config():
-    with open("domain_stats.yaml") as fh:
-        yaml_dict = yaml.safe_load(fh.read())
-    Configuration = collections.namedtuple("Configuration", list(yaml_dict) )
-    return Configuration(**yaml_dict)
 
 def local_whois_query(domain,timeout=0):
     logging.debug("local whois query. {} {}".format(domain,timeout))
@@ -216,7 +201,7 @@ def domain_stats(domain):
         logging.info(f"to the web! {domain}")
         if not verify_domain(domain):
             return json.dumps({"error": f"error resolving dns {domain}"})
-        query = json.dumps({"action":"query", "domain": domain}).encode()
+        query = json.dumps({"version":config.database_version,"action":"query", "domain": domain}).encode()
         try:
             logging.info(f"making udp query {query}")
             udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -280,7 +265,6 @@ def domain_stats(domain):
         logging.debug("Hmm  how did i get here?")
         return f"This is bad. Not sure how I got here {domain} "
 
-
 class domain_api(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -300,8 +284,6 @@ class domain_api(http.server.BaseHTTPRequestHandler):
             self.wfile.write(api_hlp.encode())
         return
 
-    def log_message(self, format, *args):
-        return
 
 class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
     def __init__(self, *args,**kwargs):
