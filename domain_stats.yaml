@@ -1,0 +1,14 @@
+cached_max_items: 65536
+database_file: domain_stats.db
+database_version: '0.3'
+local_address: 0.0.0.0
+local_port: 8000
+server_name: localhost
+server_port: 8888
+supported_tlds:
+- com
+- edu
+- gov
+- net
+- org
+target_updates: http://localhost/data
