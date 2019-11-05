@@ -11,4 +11,5 @@ supported_tlds:
 - gov
 - net
 - org
-target_updates: http://localhost/data
+target_updates: https://raw.githubusercontent.com/MarkBaggett/domain_stats2/master/data
+
