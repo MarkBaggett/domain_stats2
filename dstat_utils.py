@@ -5,6 +5,9 @@ import collections
 import threading
 import socket
 import json
+import logging
+
+logging.basicConfig(filename="domain_stats.log", level=logging.DEBUG)
 
 
 def get_creation_date(whois_record, debug=False):
@@ -12,12 +15,12 @@ def get_creation_date(whois_record, debug=False):
     if type(born_on) == list:
         #Enhancement: Improve by fiding the most recent born on date
         born_on = min(born_on)
-    elif born_on == "invalid-creation_date":
-        if debug: print("*"*50, "Improve whois record parser for creation date", whois_record)
+    if born_on == "invalid-creation_date":
+        logging.debug(f"{'*'*50}Improve whois record parser for creation date. {whois_record}")
     try:
         datetime_object = datetime.datetime.strptime(str(born_on), '%Y-%m-%d %H:%M:%S')
     except Exception as e:
-        if debug: print("Creation date parsing could not convert to tlimestamp. Falling to client query.", str(e))
+        logging.debug(f"Creation date parsing could not convert to timestamp. Falling to client query. {str(e)}")
         return False
     return datetime_object
 
@@ -34,7 +37,7 @@ def reduce_domain(domain_in):
             #print("trim top part", domain_in, domain)
     else:
         domain = ".".join(parts)
-    return domain
+    return domain.lower()
 
 def get_db():
     db =  sqlite3.connect(config.database_file, timeout=15)
