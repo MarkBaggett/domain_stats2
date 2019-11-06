@@ -46,7 +46,7 @@ config = load_config()
 
 dbpath = pathlib.Path().cwd() / config.database_file
 if not dbpath.exists():
-    print("No database was found. Try running database_admin.py --rebuild. To create it.")
+    print("No database was found. Try running database_admin.py --rebuild to create it.")
     sys.exit(0)
 
 
