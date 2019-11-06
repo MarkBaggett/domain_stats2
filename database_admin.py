@@ -92,7 +92,7 @@ def get_updates(latest_version):
     global config
     latest_major, latest_minor = map(int, str(latest_version).split("."))
     current_major, current_minor = map(int, str(config.database_version).split("."))
-    print(f"Updating form {config.database_version} to {latest_version}")
+    print(f"Updating from {config.database_version} to {latest_version}")
     if latest_major > current_major:
         print("WARNING: Domain Stats database is a major revision behind. Database required rebuild.")
         return None
