@@ -34,7 +34,6 @@ CREATE TABLE domains (
 #.quit
 
 
-database_file = "domain_stats.db"
 lock = threading.Lock()
 
 def create_tables():
@@ -66,8 +65,8 @@ def reset_database(version_number):
     global config
     tgt_major, tgt_minor = map(int, str(version_number).split("."))
     config = update_config(database_version = f"{tgt_major}.0" )
-    if pathlib.Path(database_file).exists():
-        pathlib.Path(database_file).rename("domain_stats.db.archive-{}".format(datetime.datetime.now()))
+    if pathlib.Path(config.database_file).exists():
+        pathlib.Path(config.database_file).rename("{}.archive-{}".format(config.database_file, datetime.datetime.now()))
     create_tables()
     get_updates(version_number)
 
