@@ -23,6 +23,7 @@ import functools
 import resource
 import pathlib
 import yaml
+import code
 from dstat_utils import reduce_domain, load_config, get_creation_date, verify_domain
 import logging
 
@@ -48,27 +49,25 @@ if not dbpath.exists():
     print("No database was found. Try running database_admin.py --rebuild. To create it.")
     sys.exit(0)
 
-CacheRecord = collections.namedtuple("CacheRecord", 
-                ["seen_by_web", "seen_by_us", "seen_by_you", "rank", "other"])
 
 exec_semaphore = threading.Semaphore(2)
 
-def my_lru_cache(maxsize=16384, cacheable = lambda _:True):
+def my_lru_cache(maxsize=16384, cacheable = lambda _:True, days_to_live=7):
     #Create my own lru cache so I can remove items as needed
     def wrap_function_with_cache(function_to_call):
         _cache =  collections.OrderedDict()
-        _CacheInfo = collections.namedtuple("CacheInfo", ["hits", "misses", "maxsize", "currsize","cache_bytes","app_kbytes"])
+        _CacheInfo = collections.namedtuple("CacheInfo", ["hits", "misses", "expired" ,"maxsize", "currsize","cache_bytes","app_kbytes"])
         lock = threading.RLock()
-        hit = miss = 0
+        hit = miss = expired = 0
 
         def cache_info():
             nonlocal _cache
             """Report cache statistics"""
             with lock:
-                return _CacheInfo(hit, miss, maxsize, len(_cache), sys.getsizeof(_cache),  resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+                return _CacheInfo(hit, miss, expired, maxsize, len(_cache), sys.getsizeof(_cache),  resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
 
         def reset_info():
-            nonlocal _cache
+            nonlocal _cache, hit, miss, expired
             hit = miss = 0
 
         def remove(*args):
@@ -83,20 +82,27 @@ def my_lru_cache(maxsize=16384, cacheable = lambda _:True):
                 _cache.clear()
              
         def newfunc(*args):
-            nonlocal _cache, hit, miss  
+            nonlocal _cache, hit, miss, expired
             if args in _cache:
-                hit += 1
-                with lock:
-                    _cache.move_to_end(args)
-                return _cache.get(args)
+                expiration, data = _cache.get(args)
+                if expiration > datetime.datetime.now():
+                    hit += 1
+                    with lock:
+                        _cache.move_to_end(args)
+                    return data
+                else:
+                    expired += 1
+                    with lock:
+                        del _cache[args]
             miss += 1
             ret_val = function_to_call(*args)
             #check to see if this should be cached
             if not cacheable(ret_val):
                 return ret_val
+            expiration = ret_val.get("expiration") or datetime.datetime.now() + datetime.timedelta(days = days_to_live)
             #otherwise update the cache
             with lock:
-                _cache[args] = ret_val
+                _cache[args] = (expiration, ret_val)
                 if len(_cache) > maxsize:
                     _cache.popitem(last=False)
             return ret_val
@@ -132,18 +138,20 @@ def add_to_database( domain, seen_by_web, seen_by_us, seen_by_you, rank, other )
     finally:
         database_lock.release()
 
-def json_to_cacherec(json_record, **missing_args):
-    rec = CacheRecord(**json_record, **missing_args)
-    return rec
-    
+def new_cache_entry(seen_by_web, seen_by_us, seen_by_you, rank=-1, other={}, ttl = 0):
+    cache_entry = {'seen_by_web':seen_by_web,'seen_by_us':seen_by_us,'seen_by_you':seen_by_you,'rank':rank, 'other':other }
+    if ttl:
+        cache_entry['expiration'] = datetime.datetime.now() + datetime.timedelta(min = ttl)
+    return cache_entry
+
+def error_response(error_msg, expiration=""):
+    expire = expiration or datetime.datetime.now() + datetime.timedelta(minutes=10)
+    return {"error": error_msg, "expiration":expire}
+
 def dateconverter(o):
     if isinstance(o, datetime.datetime):
         return o.strftime("%Y-%m-%d %H:%M:%S")
 
-def cacherec_to_json(cacherecord):
-    cache_dict = cacherecord._asdict()
-    cache_json = json.dumps(cache_dict, default=dateconverter)
-    return cache_json
 
 #def get_creation_date(rec):
 #    born_on = rec.get("creation_date","invalid-creation_date")
@@ -169,7 +177,7 @@ def local_whois_query(domain,timeout=0):
         logging.debug("No Born on date for. {} {}".format(domain, whois_rec) )
         return False
     today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    data = CacheRecord( born_on,today,today,-1,"{}")
+    data = new_cache_entry(born_on,today,today,-1,{})
     if not timeout:
         return data
     logging.debug("Good Citizen")
@@ -182,6 +190,7 @@ def local_whois_query(domain,timeout=0):
         logging.debug(f"Error submitting data to server {str(e)}")
     return data
 
+@my_lru_cache(maxsize = config.cached_max_items, cacheable = should_item_be_cached)
 def domain_stats(domain): 
     """ Given a domain return a tuple with  """
     """    (New to you (true or false), New to us (how new), New to all (born on date))   """
@@ -196,11 +205,13 @@ def domain_stats(domain):
     result = database_lookup(domain)
     #logging.debug("Initial database request result", result)
     if result:
-        return cacherec_to_json(result)
+        return result
     else:
-        logging.info(f"to the web! {domain}")
+        expire_now = datetime.datetime.now()
+        perm_error = datetime.datetime.now() + datetime.timedelta(days=30)
         if not verify_domain(domain):
-            return json.dumps({"error": f"error resolving dns {domain}"})
+            return error_response(f"error resolving dns {domain}")
+        logging.info(f"to the web! {domain}")
         query = json.dumps({"version":config.database_version,"action":"query", "domain": domain}).encode()
         try:
             logging.info(f"making udp query {query}")
@@ -213,55 +224,56 @@ def domain_stats(domain):
             today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             try:
                 #This should be a properly formatted json response
-                json_response = json.loads(resp.decode())
+                server_response = json.loads(resp.decode())
             except Exception as e:
                 logging.debug(f"Error parsing domain_stats server response {str(e)}")
                 return False
-            logging.debug("Version {}".format(json_response.get("version")))
-            if "version" in json_response:
-                if json_response.get("version") > config.database_version:
+            logging.debug("Version {}".format(server_response.get("version")))
+            if "version" in server_response:
+                if server_response.get("version") > config.database_version:
                     logging.debug("Version Change. Running update")
                     exit_code = os.system("python3 database_admin.py -u")
                     if exit_code == 0:
                         config = load_config()
-                del json_response['version']
-            if "error" in json_response:
-                data = ""
-                if json_response.get("error")=="server busy":
-                    timeout = json_response.get("timeout",0)
+                del server_response['version']
+            if "error" in server_response:
+                local_whois_response = ""
+                if server_response.get("error")=="server busy":
+                    timeout = server_response.get("timeout",0)
                     #This one returns a cacherec
-                    data = local_whois_query(domain,timeout)
-                    logging.debug("Local whois exec {} {} ".format(timeout, data))
-                if not data:
-                    return json.dumps({"error": f"No whois record for {domain}"})
+                    local_whois_response = local_whois_query(domain,timeout)
+                    logging.debug("Local whois exec {} {} ".format(timeout, local_whois_response))
+                if not local_whois_response:
+                    return error_response(f"No whois record for {domain}")
+                else:
+                    #What is the proper TTL for a local whois exe?  1 day
+                    data = new_cache_entry(**local_whois_response)
             else:                                                                  
-                data = json_to_cacherec(json_response, seen_by_you = today,rank=-1)
-            assert type(data) == CacheRecord
+                data = new_cache_entry(**server_response, seen_by_you = today,rank=-1)
+
             #What we commit to database is different than what we return
             #Commit data to database will contain correct data information
-            dbrec = data._asdict()
             #If this "FIRST-CONACT" from server put current date in database otherwise commit date received
-            if dbrec.get("seen_by_us") == "FIRST-CONTACT":
-                dbrec["seen_by_us"] = today
+            to_database = dict(data)
+            if to_database.get("seen_by_us") == "FIRST-CONTACT":
+                to_database["seen_by_us"] = today
             #since we queried the server this must be the seen_by_you first contact
-            dbrec["seen_by_you"] = today
-            logging.info(f"adding to database {dbrec.items()}")
-            add_to_database(domain, **dbrec)
+            to_database["seen_by_you"] = today
+            logging.info(f"adding to database {to_database.items()}")
+            add_to_database(domain, **to_database)
             #Return a record contains "FIRST-CONTACT" instead of dates.  Subsequent queries will get db record with correct data
-            return_rec = data._asdict()
-            return_rec['seen_by_you'] = "FIRST-CONTACT"
-            data = CacheRecord(**return_rec)
-            return cacherec_to_json(data)
+            data['seen_by_you'] = "FIRST-CONTACT"
+            return data
         except socket.timeout:
             logging.debug("Too much whois, too soon. Sleeping for a sec")
             time.sleep(1)
-            return json.dumps({"error": f"busy {domain}"})
+            return error_response( f"busy {domain}")
         except Exception as e:
             logging.debug(f"Error in udp query {str(e)}")
             data = local_whois_query(domain)
             if not data:
-                return json.dumps({"error": f"No whois record for {domain}"})
-            return cacherec_to_json(data)
+                return error_response( f"No whois record for {domain}", perm_error)
+            return data
         logging.debug("Hmm  how did i get here?")
         return f"This is bad. Not sure how I got here {domain} "
 
@@ -275,10 +287,10 @@ class domain_api(http.server.BaseHTTPRequestHandler):
             domain = re.search(r"[\/](.*)$", urlpath).group(1)
             #logging.debug(domain)
             if domain == "stats":
-                result = str(database_lookup.cache_info()).encode()
+                result = str(domain_stats.cache_info()).encode()
             else:
                 domain = reduce_domain(domain)
-                result = domain_stats(domain).encode()
+                result = json.dumps(domain_stats(domain), default=dateconverter).encode()
             self.wfile.write(result)
         else:
             api_hlp = 'API Documentation\nhttp://%s:%s/domain.tld   where domain is a non-dotted domain and tld is a valid top level domain.' % (self.server.server_address[0], self.server.server_address[1])
@@ -298,9 +310,9 @@ class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
         self.exitthread.clear()
         http.server.HTTPServer.__init__(self, *args, **kwargs)
 
-@my_lru_cache(maxsize = config.cached_max_items, cacheable = should_item_be_cached)
+
 def database_lookup(domain):
-    db = sqlite3.connect("domain_stats.db")
+    db = sqlite3.connect(config.database_file)
     cursor = db.cursor()
     logging.debug(f"I QUERIED THE DATABASE. NOT CACHE! for {domain}")
     result = cursor.execute("select seen_by_web, seen_by_us, seen_by_you,rank,other from domains where domain = ?" , (domain,) ).fetchone()
@@ -309,7 +321,7 @@ def database_lookup(domain):
         with database_lock:
             cursor.execute("update domains set seen_by_you=? where domain =?", (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), domain))
             db.commit()
-        return CacheRecord(*result)
+        return new_cache_entry(*result)
     return False
 
 if __name__ == "__main__":
@@ -324,12 +336,19 @@ if __name__ == "__main__":
 
     #start the server
     print('Server is Ready. http://%s:%s/domain.tld' % (config.local_address, config.local_port))
-    while True:
-        try:
-            server.handle_request()
-        except KeyboardInterrupt:
-            break
 
+#begin paste
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.daemon = True
+
+    try:
+        server_thread.start()
+        #code.interact(local=locals())
+        while True: time.sleep(100)
+    except (KeyboardInterrupt, SystemExit):
+        server.shutdown()
+        server.server_close()
+        
     print("Web API Disabled...")
     print("Control-C hit: Exiting server.  Please wait..")
 

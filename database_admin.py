@@ -9,6 +9,7 @@ import threading
 import pathlib
 import datetime
 import urllib
+import sys
 from dstat_utils import reduce_domain, load_config, verify_domain, new_domain, get_db, update_config
 
 
@@ -42,6 +43,7 @@ def create_tables():
     cursor.execute(createstr)
     datab.commit();
 
+
 def check_update():
     query = json.dumps({"action":"version"}).encode()
     try:
@@ -52,8 +54,12 @@ def check_update():
         resp, addr = udp_socket.recvfrom(32768)
         vresp = json.loads(resp.decode())
         latest_version = vresp.get("version")
+        if not latest_version:
+            print(f"Unable to connect to {config.server_name} on port {config.server_port} to determine version.")
+            sys.exit(1)
     except Exception as e:
-        print(f"udp query error {str(e)}")
+        print(f"Unable to connect to {config.server_name} on port {config.server_port} to determine version. {str(e)}")
+        sys.exit(1)
     return str(latest_version)
     
 def reset_database(version_number):
