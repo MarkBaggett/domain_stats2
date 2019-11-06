@@ -41,7 +41,7 @@ def get_db():
     return db
 
 def new_domain(cursor, rank,domain):
-    sql = "insert into domains (domain,seen_by_web, seen_by_us, seen_by_you, rank, other) values (?,?,?,?,?,?) " 
+    sql = "insert or ignore into domains (domain,seen_by_web, seen_by_us, seen_by_you, rank, other) values (?,?,?,?,?,?) " 
     with lock:
         if rank == "-2":
             try:
@@ -52,7 +52,7 @@ def new_domain(cursor, rank,domain):
             try:
                 result = cursor.execute(sql , (domain, "ESTABLISHED", "ESTABLISHED", "FIRST-CONTACT" ,rank, "{}" ) )
             except sqlite3.IntegrityError as e:
-                if "UNIQUE constraint failed" in str(e):
+                if "UNIQUE constraint failed" in str(e) or "is not unique" in str(e):
                     return False
                 else:
                     print(f"Error inserting record - {str(e)}, {dir(e)}")
