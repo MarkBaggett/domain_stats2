@@ -250,6 +250,12 @@ def domain_stats(domain):
             #Commit data to database will contain correct data information
             #If this "FIRST-CONACT" from server put current date in database otherwise commit date received
             to_database = dict(data)
+            if "error" in to_database:
+                logging.debug(f"Unexpected error key in data {data}")
+                del to_database['error']
+            if "expiration" in to_database:
+                logging.debug(f"Unexpected expiration key in data {data}")
+                del to_database['expiration']
             if to_database.get("seen_by_us") == "FIRST-CONTACT":
                 to_database["seen_by_us"] = today
             #since we queried the server this must be the seen_by_you first contact
