@@ -128,7 +128,7 @@ def should_item_be_cached(cache_item):
 def add_to_database( domain, seen_by_web, seen_by_us, seen_by_you, rank, other ):
     database_lock.acquire()
     try:
-        db = sqlite3.connect("domain_stats.db")
+        db = sqlite3.connect(config.database_file)
         cursor = db.cursor()
         sql = "insert into domains (domain,seen_by_web, seen_by_us, seen_by_you, rank, other) values (?,?,?,?,?,?)"
         result = cursor.execute(sql, (domain, seen_by_web, seen_by_us, seen_by_you, rank, other) )
@@ -163,19 +163,19 @@ def dateconverter(o):
 
 def local_whois_query(domain,timeout=0):
     logging.debug("local whois query. {} {}".format(domain,timeout))
+    perm_error = datetime.datetime.now() + datetime.timedelta(days=30)
     try:
         whois_rec = whois.whois(domain, command=True)
     except Exception as e:
         logging.debug(f"Error During local whois query {str(e)}")
-        return False
+        return error_response(f"Unable to run whois locally")
     if not whois_rec.get("domain_name"):
         logging.debug("Whois record didn't have a domain name. {}".format(whois_rec))
-        return False
-    logging.debug("whois type {}".format( type(whois_rec)))
+        return error_response(f"whois record missing domain name", perm_error) 
     born_on = get_creation_date(whois_rec)
     if not born_on:
         logging.debug("No Born on date for. {} {}".format(domain, whois_rec) )
-        return False
+        return error_response(f"whois record has no creation date", perm_error)
     today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     data = new_cache_entry(born_on,today,today,-1,{})
     if not timeout:
@@ -237,18 +237,13 @@ def domain_stats(domain):
                         config = load_config()
                 del server_response['version']
             if "error" in server_response:
-                local_whois_response = ""
-                if server_response.get("error")=="server busy":
-                    timeout = server_response.get("timeout",0)
-                    #This one returns a cacherec
-                    local_whois_response = local_whois_query(domain,timeout)
-                    logging.debug("Local whois exec {} {} ".format(timeout, local_whois_response))
-                if not local_whois_response:
-                    return error_response(f"No whois record for {domain}")
-                else:
-                    #What is the proper TTL for a local whois exe?  1 day
-                    data = new_cache_entry(**local_whois_response)
-            else:                                                                  
+                timeout = server_response.get("timeout",0)
+                data = local_whois_query(domain,timeout)
+                logging.debug("Local whois exec {} {} ".format(timeout, data))
+                if 'error' in data:
+                    return data
+            else:
+                logging.debug(f"server_response: {server_response} type:{type(server_response)}")                                                                  
                 data = new_cache_entry(**server_response, seen_by_you = today,rank=-1)
 
             #What we commit to database is different than what we return
@@ -270,10 +265,12 @@ def domain_stats(domain):
             return error_response( f"busy {domain}")
         except Exception as e:
             logging.debug(f"Error in udp query {str(e)}")
+            #last change try localwhois
             data = local_whois_query(domain)
-            if not data:
-                return error_response( f"No whois record for {domain}", perm_error)
-            return data
+            print("")
+            if "error" in data:
+                return data
+            return new_cache_entry(**data)
         logging.debug("Hmm  how did i get here?")
         return f"This is bad. Not sure how I got here {domain} "
 
