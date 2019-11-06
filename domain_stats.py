@@ -277,6 +277,7 @@ class domain_api(http.server.BaseHTTPRequestHandler):
             if domain == "stats":
                 result = str(database_lookup.cache_info()).encode()
             else:
+                domain = reduce_domain(domain)
                 result = domain_stats(domain).encode()
             self.wfile.write(result)
         else:

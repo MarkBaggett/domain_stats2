@@ -78,7 +78,7 @@ def process_domain_updates(update_file,verify=True):
     cursor = db.cursor()    
     for pos,entry in enumerate(new_domains):
         if pos % 50 == 0:
-            print("\r|{0:-<50}| {1:3.2f}%".format("X"*( 50 * pos//num_recs), 100*pos//num_recs),end="")
+            print("\r|{0:-<50}| {1:3.2f}%".format("X"*( 50 * pos//num_recs), 100*pos/num_recs),end="")
         rank, domain = entry.split(",")
         odomain = domain.strip()
         domain = reduce_domain(odomain)
@@ -103,7 +103,7 @@ def get_updates(latest_version):
         tgt_url = f"{config.target_updates}/{current_major}/{update}.txt" 
         dst_path = pathlib.Path().cwd() / "data" / f"{current_major}" / f"{update}.txt"
         urllib.request.urlretrieve(tgt_url, str(dst_path))
-        process_domain_updates(str(dst_path), verify=False)
+        process_domain_updates(str(dst_path), verify=args.verify)
         config = update_config(database_version= version)
 
 if __name__ == "__main__":
@@ -114,7 +114,8 @@ if __name__ == "__main__":
     parser.add_argument('--rebuild',action="store_true",required=False,help='Erase and rebuild the entire database to the latest version')
     parser.add_argument('-u','--update',action="store_true", required=False,help='Update the database established domains.')
     parser.add_argument('-v','--version',action="store_true", required=False,help='Check database version')
-   
+    parser.add_argument('--verify',action="store_true", help='Verify each addition with DNS (slow)')
+ 
     args = parser.parse_args()
 
     if args.firstcontacts:
