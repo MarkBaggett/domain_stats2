@@ -123,7 +123,7 @@ def my_lru_cache(maxsize=16384, cacheable = lambda _:True, days_to_live=7):
 def should_item_be_cached(cache_item):
     #If funciton returns False it is not cached
     #We don't want to cache blank database responses or responses that contain "FIRST-CONTACT"
-    return cache_item and not "FIRST-CONTACT" in cache_item
+    return cache_item and not "FIRST-CONTACT" in cache_item.values()
 
 def add_to_database( domain, seen_by_web, seen_by_us, seen_by_you, rank, other ):
     database_lock.acquire()
@@ -152,14 +152,18 @@ def dateconverter(o):
     if isinstance(o, datetime.datetime):
         return o.strftime("%Y-%m-%d %H:%M:%S")
 
-
-#def get_creation_date(rec):
-#    born_on = rec.get("creation_date","invalid-creation_date")
-#    if type(born_on) == list:
-#        #Enhancement: Improve by fiding the most recent born on date
-#        born_on = min(born_on)
-#    return born_on
-
+def database_lookup(domain):
+    db = sqlite3.connect(config.database_file)
+    cursor = db.cursor()
+    logging.debug(f"I QUERIED THE DATABASE. NOT CACHE! for {domain}")
+    result = cursor.execute("select seen_by_web, seen_by_us, seen_by_you,rank,other from domains where domain = ?" , (domain,) ).fetchone()
+    #If we get a record UPDATE Database with date that you first queried tht domain
+    if result:
+        with database_lock:
+            cursor.execute("update domains set seen_by_you=? where domain =?", (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), domain))
+            db.commit()
+        return new_cache_entry(*result)
+    return False
 
 def local_whois_query(domain,timeout=0):
     logging.debug("local whois query. {} {}".format(domain,timeout))
@@ -313,19 +317,6 @@ class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
         self.exitthread.clear()
         http.server.HTTPServer.__init__(self, *args, **kwargs)
 
-
-def database_lookup(domain):
-    db = sqlite3.connect(config.database_file)
-    cursor = db.cursor()
-    logging.debug(f"I QUERIED THE DATABASE. NOT CACHE! for {domain}")
-    result = cursor.execute("select seen_by_web, seen_by_us, seen_by_you,rank,other from domains where domain = ?" , (domain,) ).fetchone()
-    #If we get a record UPDATE Database with date that you first queried tht domain
-    if result:
-        with database_lock:
-            cursor.execute("update domains set seen_by_you=? where domain =?", (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), domain))
-            db.commit()
-        return new_cache_entry(*result)
-    return False
 
 if __name__ == "__main__":
     try:
