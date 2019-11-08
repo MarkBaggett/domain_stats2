@@ -7,7 +7,7 @@ import socket
 import json
 import logging
 
-logging.basicConfig(filename="domain_stats.log", level=logging.DEBUG)
+logging.basicConfig(filename="domain_stats.log", format='%(asctime)s %(levelname)-8s %(message)s', level=logging.DEBUG)
 
 
 def get_creation_date(whois_record, debug=False):

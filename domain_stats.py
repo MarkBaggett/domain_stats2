@@ -27,7 +27,7 @@ import code
 from dstat_utils import reduce_domain, load_config, get_creation_date, verify_domain
 import logging
 
-logging.basicConfig(filename="domain_stats.log", level=logging.DEBUG)
+logging.basicConfig(filename="domain_stats.log",format='%(asctime)s %(levelname)-8s %(message)s',level=logging.DEBUG)
 
 
 
