@@ -125,13 +125,13 @@ def should_item_be_cached(cache_item):
     #We don't want to cache blank database responses or responses that contain "FIRST-CONTACT"
     return cache_item and not "FIRST-CONTACT" in cache_item.values()
 
-def add_to_database( domain, seen_by_web, seen_by_us, seen_by_you, rank, other ):
+def add_to_database( domain, seen_by_web, seen_by_us, seen_by_you, rank, other, error="",expiration="" ):
     database_lock.acquire()
     try:
         db = sqlite3.connect(config.database_file)
         cursor = db.cursor()
         sql = "insert into domains (domain,seen_by_web, seen_by_us, seen_by_you, rank, other) values (?,?,?,?,?,?)"
-        result = cursor.execute(sql, (domain, seen_by_web, seen_by_us, seen_by_you, rank, other) )
+        result = cursor.execute(sql, (domain, seen_by_web, seen_by_us, seen_by_you, rank, json.dumps(other)) )
         db.commit()
     except Exception as e:
         logging.debug("Error occured writing to database. {}".format(str(e)))
