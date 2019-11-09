@@ -170,7 +170,7 @@ def local_whois_query(domain,timeout=0):
         whois_rec = whois.whois(domain, command=True)
     except Exception as e:
         logging.debug(f"Error During local whois query {str(e)}")
-        return error_response(f"Unable to run whois locally")
+        return error_response(f"Unable to run whois locally", perm_error)
     if not whois_rec.get("domain_name"):
         logging.debug("Whois record didn't have a domain name. {}".format(whois_rec))
         return error_response(f"whois record missing domain name", perm_error) 
@@ -223,7 +223,7 @@ def domain_stats(domain):
             *Other fields to be determined (freq score, flagged as malicious)
             }
     """
-    global config, resolved_db, resolved_local, resolved_remote, resolved_error
+    global config, resolved_db, resolved_local, resolved_remote, resolved_error, 
     result = database_lookup(domain)
     #logging.debug("Initial database request result", result)
     if result:
