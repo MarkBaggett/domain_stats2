@@ -29,8 +29,6 @@ import logging
 
 logging.basicConfig(filename="domain_stats.log",format='%(asctime)s %(levelname)-8s %(message)s',level=logging.DEBUG)
 
-
-
 try:
     import whois
 except Exception as e:
@@ -194,6 +192,26 @@ def local_whois_query(domain,timeout=0):
         logging.debug(f"Error submitting data to server {str(e)}")
     return data
 
+def health_check():
+    global health_thread    
+    logging.debug("Submit Health Check")
+    memcache_data = domain_stats.cache_info()
+    submit_data = {"action":"healthcheck","memcache":memcache_data,"netstats":(resolved_db,resolved_local,resolved_remote,resolved_error)}
+    try:
+        submit_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        submit_socket.settimeout(15)
+        submit_socket.sendto(json.dumps(submit_data,default=dateconverter).encode(), (config.server_name,config.server_port))
+        resp, addr = submit_socket.recvfrom(32768)
+        logging.info(f"health check repsponse {resp}")
+        resp_dict = json.loads(resp)
+        interval = resp_dict.get("interval",30)
+    except Exception as e:
+        logging.debug(f"Error processing health response {str(e)}")
+    if not ready_to_exit.is_set():
+        health_thread = threading.Timer(interval * 60, health_check)
+        health_thread.start()
+    return health_thread
+
 @my_lru_cache(maxsize = config.cached_max_items, cacheable = should_item_be_cached)
 def domain_stats(domain): 
     """ Given a domain return a tuple with  """
@@ -205,7 +223,7 @@ def domain_stats(domain):
             *Other fields to be determined (freq score, flagged as malicious)
             }
     """
-    global config
+    global config, resolved_db, resolved_local, resolved_remote, resolved_error
     result = database_lookup(domain)
     #logging.debug("Initial database request result", result)
     if result:
@@ -214,6 +232,7 @@ def domain_stats(domain):
         expire_now = datetime.datetime.now()
         perm_error = datetime.datetime.now() + datetime.timedelta(days=30)
         if not verify_domain(domain):
+            resolved_db += 1
             return error_response(f"error resolving dns {domain}")
         logging.info(f"to the web! {domain}")
         query = json.dumps({"version":config.database_version,"action":"query", "domain": domain}).encode()
@@ -230,6 +249,7 @@ def domain_stats(domain):
                 #This should be a properly formatted json response
                 server_response = json.loads(resp.decode())
             except Exception as e:
+                resolved_error += 1
                 logging.debug(f"Error parsing domain_stats server response {str(e)}")
                 return False
             logging.debug("Version {}".format(server_response.get("version")))
@@ -243,11 +263,13 @@ def domain_stats(domain):
             if "error" in server_response:
                 timeout = server_response.get("timeout",0)
                 data = local_whois_query(domain,timeout)
+                resolved_local += 1
                 logging.debug("Local whois exec {} {} ".format(timeout, data))
                 if 'error' in data:
                     return data
             else:
-                logging.debug(f"server_response: {server_response} type:{type(server_response)}")                                                                  
+                logging.debug(f"server_response: {server_response}")                                                                  
+                resolved_remote += 1
                 data = new_cache_entry(**server_response, seen_by_you = today,rank=-1)
 
             #What we commit to database is different than what we return
@@ -325,11 +347,16 @@ if __name__ == "__main__":
        print(f"Unable to resolve {config.server_name}") 
 
     #Setup the server.
+    start_time = datetime.datetime.now()
+    resolved_local = resolved_remote = resolved_error = resolved_db  = 0
     database_lock = threading.Lock()
     server = ThreadedDomainStats((config.local_address, config.local_port), domain_api)
 
     #start the server
     print('Server is Ready. http://%s:%s/domain.tld' % (config.local_address, config.local_port))
+    ready_to_exit = threading.Event()
+    ready_to_exit.clear()
+    health_thread = health_check()
 
 #begin paste
     server_thread = threading.Thread(target=server.serve_forever)
@@ -345,4 +372,5 @@ if __name__ == "__main__":
         
     print("Web API Disabled...")
     print("Control-C hit: Exiting server.  Please wait..")
+    health_thread.cancel()
 
