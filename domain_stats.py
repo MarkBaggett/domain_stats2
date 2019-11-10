@@ -223,14 +223,21 @@ def domain_stats(domain):
             *Other fields to be determined (freq score, flagged as malicious)
             }
     """
-    global config, resolved_db, resolved_local, resolved_remote, resolved_error, 
+    global config, resolved_db, resolved_local, resolved_remote, resolved_error
+    expire_now = datetime.datetime.now()
+    perm_error = datetime.datetime.now() + datetime.timedelta(days=30)
+    
+    if "." in domain:
+        tld = domain.split(".")[-1]
+        if tld in config.prohibited_tlds:
+            resolved_error+=1
+            return error_response(f"No whois or support for TLD {tld} ", perm_error)
+
     result = database_lookup(domain)
     #logging.debug("Initial database request result", result)
     if result:
         return result
     else:
-        expire_now = datetime.datetime.now()
-        perm_error = datetime.datetime.now() + datetime.timedelta(days=30)
         if not verify_domain(domain):
             resolved_db += 1
             return error_response(f"error resolving dns {domain}")
