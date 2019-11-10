@@ -68,6 +68,15 @@ def my_lru_cache(maxsize=16384, cacheable = lambda _:True, days_to_live=7):
             nonlocal _cache, hit, miss, expired
             hit = miss = 0
 
+        def cache_dump(fname):
+            with open(fname,"wb") as fhandle:
+                pickle.dump(_cache, fhandle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        def cache_load(fname):
+            with lock:
+                with open(fname, "rb") as fhandle:
+                     _cache.update(pickle.load(fhandle))  
+
         def remove(*args):
             nonlocal _cache
             if args in _cache:
@@ -110,6 +119,8 @@ def my_lru_cache(maxsize=16384, cacheable = lambda _:True, days_to_live=7):
             return ret_val
 
         newfunc.cache = _cache
+        newfunc.cache_dump = cache_dump
+        newfunc.cache_load = cache_load
         newfunc.cache_info = cache_info
         newfunc.remove = remove
         newfunc.reset_info = reset_info
@@ -352,6 +363,12 @@ if __name__ == "__main__":
        serverip = socket.gethostbyname(config.server_name)
     except Exception as e:
        print(f"Unable to resolve {config.server_name}") 
+       sys.exit(1)
+
+    #Reload memory cache
+    cache_file = pathlib.Path(config.memory_cache)
+    if cache_file.exists():
+        domain_stats.cache_load(str(cache_file))    
 
     #Setup the server.
     start_time = datetime.datetime.now()
@@ -380,4 +397,9 @@ if __name__ == "__main__":
     print("Web API Disabled...")
     print("Control-C hit: Exiting server.  Please wait..")
     health_thread.cancel()
+    print("Commiting Cache to disk...")
+    domain_stats.cache_dump(config.memory_cache)
+
+    print("Bye!")
+
 

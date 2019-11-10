@@ -1,5 +1,6 @@
 cached_max_items: 65536
 database_file: domain_stats.db
+memory_cache: domain_stats.cache
 database_version: '0.2'
 local_address: 0.0.0.0
 local_port: 8000
