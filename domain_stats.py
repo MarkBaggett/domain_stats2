@@ -247,10 +247,11 @@ def domain_stats(domain):
     result = database_lookup(domain)
     #logging.debug("Initial database request result", result)
     if result:
+        resolved_db += 1
         return result
     else:
         if not verify_domain(domain):
-            resolved_db += 1
+            resolved_error+= 1
             return error_response(f"error resolving dns {domain}")
         logging.info(f"to the web! {domain}")
         query = json.dumps({"version":config.database_version,"action":"query", "domain": domain}).encode()
