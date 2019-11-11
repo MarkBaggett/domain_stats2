@@ -6698,7 +6698,8 @@
 -1,neonova.net
 -1,epigenomicslab.com
 -1,benfica.com
--1,baswaphon.com-1,home.pl
+-1,baswaphon.com
+-1,home.pl
 -1,gosister.co.kr
 -1,aetnastudenthealth.com
 -1,blackbookinformation.com
