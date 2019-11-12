@@ -1,11 +1,11 @@
 cached_max_items: 65536
 database_file: domain_stats.db
-memory_cache: domain_stats.cache
-database_version: '0.2'
+database_version: '0.3'
+#Mode=1 Only Local Whois exec via cli,2=Only Local Whois vi,3=Whois Lookup via Cloud
+mode: 3
 local_address: 0.0.0.0
 local_port: 8000
-server_name: ec2-3-86-60-236.compute-1.amazonaws.com
-server_port: 4100
+memory_cache: domain_stats.cache
 prohibited_tlds:
 - local
 - arpa
@@ -13,4 +13,6 @@ prohibited_tlds:
 - es
 - vn
 - tt
+server_name: ec2-3-86-60-236.compute-1.amazonaws.com
+server_port: 4100
 target_updates: https://raw.githubusercontent.com/MarkBaggett/domain_stats2/master/data

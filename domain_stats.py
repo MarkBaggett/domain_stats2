@@ -178,7 +178,8 @@ def local_whois_query(domain,timeout=0):
     logging.debug("local whois query. {} {}".format(domain,timeout))
     perm_error = datetime.datetime.now() + datetime.timedelta(days=30)
     try:
-        whois_rec = whois.whois(domain, command=True)
+        use_whois_cmd = True if config.mode==1 else False
+        whois_rec = whois.whois(domain, command=use_whois_cmd)
     except Exception as e:
         logging.debug(f"Error During local whois query {str(e)}")
         return error_response(f"Unable to run whois locally", perm_error)
@@ -191,6 +192,8 @@ def local_whois_query(domain,timeout=0):
         return error_response(f"whois record has no creation date", perm_error)
     today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     data = new_cache_entry(born_on,today,today,-1,{})
+    if config.mode != 3:
+        return data
     if not timeout:
         return data
     logging.debug("Good Citizen")
@@ -253,6 +256,10 @@ def domain_stats(domain):
         if not verify_domain(domain):
             resolved_error+= 1
             return error_response(f"error resolving dns {domain}")
+        if config.mode != 3:
+            result = local_whois_query(domain,0)
+            result['seen_by_us']="UNSUPPORTED"
+            return result
         logging.info(f"to the web! {domain}")
         query = json.dumps({"version":config.database_version,"action":"query", "domain": domain}).encode()
         try:
