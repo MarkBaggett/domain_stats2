@@ -3,7 +3,7 @@ cached_max_items: 65536
 #This is the path to the sqlite database that contains the domain information
 database_file: domain_stats.db
 #Mode=Use this to control how domain stats resolves hosts that are not in the database
-#Set to 1=Only Local Whois exec via cli,2=Only Local Whois vi,3=Whois Lookup central domain stats with local whois fallback
+#Set to 1=Only Local Whois exec via cli,2=Only Local Whois via python,3=Whois Lookup central domain stats with local whois fallback
 mode: 3
 #What IP address do you want domain stats to listen on? 0.0.0.0 means all public and private IP addresses
 local_address: 0.0.0.0
@@ -29,3 +29,6 @@ target_updates: https://raw.githubusercontent.com/MarkBaggett/domain_stats2/mast
 database_version: '0.3'
 #ALL timestamps are UTC if you want "seen_my_you" to be in your local timezone make that adjustment here. Example EST=-5 EDT=-4, etc
 timezone_offset: 0
+#Control detail in logging 
+#0=off, 1=on, 2=debug
+log_detail: 0

@@ -27,7 +27,6 @@ import code
 from dstat_utils import reduce_domain, load_config, get_creation_date, verify_domain
 import logging
 
-logging.basicConfig(filename="domain_stats.log",format='%(asctime)s %(levelname)-8s %(message)s',level=logging.DEBUG)
 
 try:
     import whois
@@ -35,17 +34,19 @@ except Exception as e:
     print(str(e))
     print("You need to install the Python whois module.  Install PIP (https://bootstrap.pypa.io/get-pip.py).  Then 'pip install python-whois' ")
     sys.exit(0)
-    
-if os.system("which whois") != 0:
-    print("You need to have whois installed on this machine.  Try 'apt install whois' ")
-    sys.exit(0)
 
 config = load_config()
+    
+if config.mode!=2 and os.system("which whois") != 0:
+    print("You need to have whois installed on this machine.  Try 'apt install whois' ")
+    sys.exit(0)
 
 dbpath = pathlib.Path().cwd() / config.database_file
 if not dbpath.exists():
     print("No database was found. Try running database_admin.py --rebuild to create it.")
     sys.exit(0)
+
+
 
 
 exec_semaphore = threading.Semaphore(2)
@@ -143,7 +144,7 @@ def add_to_database( domain, seen_by_web, seen_by_us, seen_by_you, rank, other, 
         result = cursor.execute(sql, (domain, seen_by_web, seen_by_us, seen_by_you, rank, json.dumps(other)) )
         db.commit()
     except Exception as e:
-        logging.debug("Error occured writing to database. {}".format(str(e)))
+        log.debug("Error occured writing to database. {}".format(str(e)))
     finally:
         database_lock.release()
 
@@ -164,7 +165,6 @@ def dateconverter(o):
 def database_lookup(domain):
     db = sqlite3.connect(config.database_file)
     cursor = db.cursor()
-    logging.debug(f"I QUERIED THE DATABASE. NOT CACHE! for {domain}")
     result = cursor.execute("select seen_by_web, seen_by_us, seen_by_you,rank,other from domains where domain = ?" , (domain,) ).fetchone()
     #If we get a record UPDATE Database with date that you first queried tht domain
     if result:
@@ -175,20 +175,20 @@ def database_lookup(domain):
     return False
 
 def local_whois_query(domain,timeout=0):
-    logging.debug("local whois query. {} {}".format(domain,timeout))
+    log.debug("local whois query. {} {}".format(domain,timeout))
     perm_error = datetime.datetime.utcnow() + datetime.timedelta(days=30)
     try:
         use_whois_cmd = True if config.mode==1 else False
         whois_rec = whois.whois(domain, command=use_whois_cmd)
     except Exception as e:
-        logging.debug(f"Error During local whois query {str(e)}")
+        log.debug(f"Error During local whois query {str(e)}")
         return error_response(f"Unable to run whois locally", perm_error)
     if not whois_rec.get("domain_name"):
-        logging.debug("Whois record didn't have a domain name. {}".format(whois_rec))
+        log.debug("Whois record didn't have a domain name. {}".format(whois_rec))
         return error_response(f"whois record missing domain name", perm_error) 
     born_on = get_creation_date(whois_rec)
     if not born_on:
-        logging.debug("No Born on date for. {} {}".format(domain, whois_rec) )
+        log.debug("No Born on date for. {} {}".format(domain, whois_rec) )
         return error_response(f"whois record has no creation date", perm_error)
     today = (datetime.datetime.utcnow()+datetime.timedelta(hours=config.timezone_offset)).strftime("%Y-%m-%d %H:%M:%S")
     data = new_cache_entry(born_on,today,today,-1,{})
@@ -196,19 +196,19 @@ def local_whois_query(domain,timeout=0):
         return data
     if not timeout:
         return data
-    logging.debug("Good Citizen")
+    log.debug("Good Citizen")
     submit_data = {"action":"update","timeout":timeout,"data":json.dumps(whois_rec,default=dateconverter)}
     try:
         submit_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         submit_socket.settimeout(15)
         submit_socket.sendto(json.dumps(submit_data,default=dateconverter).encode(), (config.server_name,config.server_port))
     except Exception as e:
-        logging.debug(f"Error submitting data to server {str(e)}")
+        log.debug(f"Error submitting data to server {str(e)}")
     return data
 
 def health_check():
     global health_thread    
-    logging.debug("Submit Health Check")
+    log.debug("Submit Health Check")
     memcache_data = domain_stats.cache_info()
     submit_data = {"action":"healthcheck","memcache":memcache_data,"netstats":(resolved_db,resolved_local,resolved_remote,resolved_error)}
     try:
@@ -216,11 +216,11 @@ def health_check():
         submit_socket.settimeout(15)
         submit_socket.sendto(json.dumps(submit_data,default=dateconverter).encode(), (config.server_name,config.server_port))
         resp, addr = submit_socket.recvfrom(32768)
-        logging.info(f"health check repsponse {resp}")
+        log.info(f"health check repsponse {resp}")
         resp_dict = json.loads(resp)
         interval = resp_dict.get("interval",30)
     except Exception as e:
-        logging.debug(f"Error processing health response {str(e)}")
+        log.debug(f"Error processing health response {str(e)}")
     if not ready_to_exit.is_set():
         health_thread = threading.Timer(interval * 60, health_check)
         health_thread.start()
@@ -248,7 +248,7 @@ def domain_stats(domain):
             return error_response(f"No whois or support for TLD {tld} ", perm_error)
 
     result = database_lookup(domain)
-    #logging.debug("Initial database request result", result)
+    #log.debug("Initial database request result", result)
     if result:
         resolved_db += 1
         return result
@@ -260,28 +260,28 @@ def domain_stats(domain):
             result = local_whois_query(domain,0)
             result['seen_by_us']="UNSUPPORTED"
             return result
-        logging.info(f"to the web! {domain}")
+        log.debug(f"to the web! {domain}")
         query = json.dumps({"version":config.database_version,"action":"query", "domain": domain}).encode()
         try:
-            logging.info(f"making udp query {query}")
+            log.info(f"making udp query {query}")
             udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             udp_socket.settimeout(15)
             udp_socket.sendto(query, (config.server_name,config.server_port))
             #Only a single packet but use loop incase there are new lines in the data
             resp, addr = udp_socket.recvfrom(32768)
-            logging.info(f"udp repsponse {resp}")
+            log.info(f"udp repsponse {resp}")
             today = (datetime.datetime.utcnow()+datetime.timedelta(hours=config.timezone_offset)).strftime("%Y-%m-%d %H:%M:%S")
             try:
                 #This should be a properly formatted json response
                 server_response = json.loads(resp.decode())
             except Exception as e:
                 resolved_error += 1
-                logging.debug(f"Error parsing domain_stats server response {str(e)}")
+                log.debug(f"Error parsing domain_stats server response {str(e)}")
                 return False
-            logging.debug("Version {}".format(server_response.get("version")))
+            log.debug("Version {}".format(server_response.get("version")))
             if "version" in server_response:
                 if server_response.get("version") > config.database_version:
-                    logging.debug("Version Change. Running update")
+                    log.debug("Version Change. Running update")
                     exit_code = os.system("python3 database_admin.py -u")
                     if exit_code == 0:
                         config = load_config()
@@ -290,11 +290,11 @@ def domain_stats(domain):
                 timeout = server_response.get("timeout",0)
                 data = local_whois_query(domain,timeout)
                 resolved_local += 1
-                logging.debug("Local whois exec {} {} ".format(timeout, data))
+                log.debug("Local whois exec {} {} ".format(timeout, data))
                 if 'error' in data:
                     return data
             else:
-                logging.debug(f"server_response: {server_response}")                                                                  
+                log.debug(f"server_response: {server_response}")                                                                  
                 resolved_remote += 1
                 data = new_cache_entry(**server_response, seen_by_you = today,rank=-1)
 
@@ -303,33 +303,33 @@ def domain_stats(domain):
             #If this "FIRST-CONACT" from server put current date in database otherwise commit date received
             to_database = dict(data)
             if "error" in to_database:
-                logging.debug(f"Unexpected error key in data {data}")
+                log.debug(f"Unexpected error key in data {data}")
                 del to_database['error']
             if "expiration" in to_database:
-                logging.debug(f"Unexpected expiration key in data {data}")
+                log.debug(f"Unexpected expiration key in data {data}")
                 del to_database['expiration']
             if to_database.get("seen_by_us") == "FIRST-CONTACT":
                 to_database["seen_by_us"] = today
             #since we queried the server this must be the seen_by_you first contact
             to_database["seen_by_you"] = today
-            logging.info(f"adding to database {to_database.items()}")
+            log.info(f"adding to database {to_database.items()}")
             add_to_database(domain, **to_database)
             #Return a record contains "FIRST-CONTACT" instead of dates.  Subsequent queries will get db record with correct data
             data['seen_by_you'] = "FIRST-CONTACT"
             return data
         except socket.timeout:
-            logging.debug("Too much whois, too soon. Sleeping for a sec")
+            log.debug("Too much whois, too soon. Sleeping for a sec")
             time.sleep(1)
             return error_response( f"busy {domain}")
         except Exception as e:
-            logging.debug(f"Error in udp query {str(e)}")
+            log.debug(f"Error in udp query {str(e)}")
             #last change try localwhois
             data = local_whois_query(domain)
             print("")
             if "error" in data:
                 return data
             return new_cache_entry(**data)
-        logging.debug("Hmm  how did i get here?")
+        log.debug(f"You have reached the code that should never be reached {domain} {data}")
         return f"This is bad. Not sure how I got here {domain} "
 
 class domain_api(http.server.BaseHTTPRequestHandler):
@@ -340,7 +340,7 @@ class domain_api(http.server.BaseHTTPRequestHandler):
         (ignore, ignore, urlpath, urlparams, ignore) = urllib.parse.urlsplit(self.path)
         if re.search("[\/][\w.]*", urlpath):
             domain = re.search(r"[\/](.*)$", urlpath).group(1)
-            #logging.debug(domain)
+            #log.debug(domain)
             if domain == "stats":
                 result = str(domain_stats.cache_info()).encode()
             else:
@@ -356,7 +356,6 @@ class domain_api(http.server.BaseHTTPRequestHandler):
         return
 
 
-
 class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
     def __init__(self, *args,**kwargs):
         self.args = ""
@@ -364,6 +363,20 @@ class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
         self.exitthread = threading.Event()
         self.exitthread.clear()
         http.server.HTTPServer.__init__(self, *args, **kwargs)
+
+log = logging.getLogger(__name__)
+logfile = logging.FileHandler('domain_stats.log')
+logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
+logfile.setFormatter(logformat)
+
+if config.log_detail==0:
+    log.setLevel(level=logging.CRITICAL)
+elif config.log_detail==1:
+    log.addHandler(logfile)
+    log.setLevel(logging.INFO)
+else:
+    log.addHandler(logfile)
+    log.setLevel(logging.DEBUG)
 
 
 if __name__ == "__main__":

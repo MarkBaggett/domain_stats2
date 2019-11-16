@@ -7,7 +7,6 @@ import socket
 import json
 import logging
 
-logging.basicConfig(filename="domain_stats.log", format='%(asctime)s %(levelname)-8s %(message)s', level=logging.DEBUG)
 
 
 def get_creation_date(whois_record, debug=False):
@@ -16,11 +15,11 @@ def get_creation_date(whois_record, debug=False):
         #Enhancement: Improve by fiding the most recent born on date
         born_on = min(born_on)
     if born_on == "invalid-creation_date":
-        logging.debug(f"{'*'*50}Improve whois record parser for creation date. {whois_record}")
+        log.debug(f"{'*'*50}Improve whois record parser for creation date. {whois_record}")
     try:
         datetime_object = datetime.datetime.strptime(str(born_on), '%Y-%m-%d %H:%M:%S')
     except Exception as e:
-        logging.debug(f"Creation date parsing could not convert to timestamp. Falling to client query. {str(e)}")
+        log.debug(f"Creation date parsing could not convert to timestamp. Falling to client query. {str(e)}")
         return False
     return datetime_object
 
@@ -101,3 +100,19 @@ def verify_domain(domain):
 
 config = load_config()
 lock = threading.Lock()
+
+log = logging.getLogger(__name__)
+logfile = logging.FileHandler('domain_stats.log')
+logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
+logfile.setFormatter(logformat)
+
+if config.log_detail==0:
+    log.setLevel(level=logging.CRITICAL)
+elif config.log_detail==1:
+    log.addHandler(logfile)
+    log.setLevel(logging.INFO)
+else:
+    log.addHandler(logfile)
+    log.setLevel(logging.DEBUG)
+
+
