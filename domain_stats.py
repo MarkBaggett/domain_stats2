@@ -92,7 +92,7 @@ def my_lru_cache(maxsize=16384, cacheable = lambda _:True, days_to_live=7):
             nonlocal _cache, hit, miss, expired
             if args in _cache:
                 expiration, data = _cache.get(args)
-                if expiration > datetime.datetime.now():
+                if expiration > datetime.datetime.utcnow():
                     hit += 1
                     with lock:
                         _cache.move_to_end(args)
@@ -106,7 +106,7 @@ def my_lru_cache(maxsize=16384, cacheable = lambda _:True, days_to_live=7):
             #check to see if this should be cached
             if not cacheable(ret_val):
                 return ret_val
-            expiration = ret_val.get("expiration") or datetime.datetime.now() + datetime.timedelta(days = days_to_live)
+            expiration = ret_val.get("expiration") or datetime.datetime.utcnow() + datetime.timedelta(days = days_to_live)
             #otherwise update the cache
             with lock:
                 _cache[args] = (expiration, ret_val)
@@ -150,11 +150,11 @@ def add_to_database( domain, seen_by_web, seen_by_us, seen_by_you, rank, other, 
 def new_cache_entry(seen_by_web, seen_by_us, seen_by_you, rank=-1, other={}, ttl = 0):
     cache_entry = {'seen_by_web':seen_by_web,'seen_by_us':seen_by_us,'seen_by_you':seen_by_you,'rank':rank, 'other':other }
     if ttl:
-        cache_entry['expiration'] = datetime.datetime.now() + datetime.timedelta(min = ttl)
+        cache_entry['expiration'] = datetime.datetime.utcnow() + datetime.timedelta(min = ttl)
     return cache_entry
 
 def error_response(error_msg, expiration=""):
-    expire = expiration or datetime.datetime.now() + datetime.timedelta(minutes=10)
+    expire = expiration or datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
     return {"error": error_msg, "expiration":expire}
 
 def dateconverter(o):
@@ -169,14 +169,14 @@ def database_lookup(domain):
     #If we get a record UPDATE Database with date that you first queried tht domain
     if result:
         with database_lock:
-            cursor.execute("update domains set seen_by_you=? where domain =?", (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), domain))
+            cursor.execute("update domains set seen_by_you=? where domain =?", ((datetime.datetime.utcnow()+datetime.timedelta(hours=config.timezone_offset)).strftime("%Y-%m-%d %H:%M:%S"), domain))
             db.commit()
         return new_cache_entry(*result)
     return False
 
 def local_whois_query(domain,timeout=0):
     logging.debug("local whois query. {} {}".format(domain,timeout))
-    perm_error = datetime.datetime.now() + datetime.timedelta(days=30)
+    perm_error = datetime.datetime.utcnow() + datetime.timedelta(days=30)
     try:
         use_whois_cmd = True if config.mode==1 else False
         whois_rec = whois.whois(domain, command=use_whois_cmd)
@@ -190,7 +190,7 @@ def local_whois_query(domain,timeout=0):
     if not born_on:
         logging.debug("No Born on date for. {} {}".format(domain, whois_rec) )
         return error_response(f"whois record has no creation date", perm_error)
-    today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    today = (datetime.datetime.utcnow()+datetime.timedelta(hours=config.timezone_offset)).strftime("%Y-%m-%d %H:%M:%S")
     data = new_cache_entry(born_on,today,today,-1,{})
     if config.mode != 3:
         return data
@@ -238,8 +238,8 @@ def domain_stats(domain):
             }
     """
     global config, resolved_db, resolved_local, resolved_remote, resolved_error
-    expire_now = datetime.datetime.now()
-    perm_error = datetime.datetime.now() + datetime.timedelta(days=30)
+    expire_now = datetime.datetime.utcnow()
+    perm_error = datetime.datetime.utcnow() + datetime.timedelta(days=30)
     
     if "." in domain:
         tld = domain.split(".")[-1]
@@ -270,7 +270,7 @@ def domain_stats(domain):
             #Only a single packet but use loop incase there are new lines in the data
             resp, addr = udp_socket.recvfrom(32768)
             logging.info(f"udp repsponse {resp}")
-            today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            today = (datetime.datetime.utcnow()+datetime.timedelta(hours=config.timezone_offset)).strftime("%Y-%m-%d %H:%M:%S")
             try:
                 #This should be a properly formatted json response
                 server_response = json.loads(resp.decode())
@@ -379,7 +379,7 @@ if __name__ == "__main__":
         domain_stats.cache_load(str(cache_file))    
 
     #Setup the server.
-    start_time = datetime.datetime.now()
+    start_time = datetime.datetime.utcnow()
     resolved_local = resolved_remote = resolved_error = resolved_db  = 0
     database_lock = threading.Lock()
     server = ThreadedDomainStats((config.local_address, config.local_port), domain_api)
