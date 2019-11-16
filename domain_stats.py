@@ -37,7 +37,7 @@ except Exception as e:
 
 config = load_config()
     
-if config.mode!=2 and os.system("which whois") != 0:
+if config.mode!=1 and os.system("which whois") != 0:
     print("You need to have whois installed on this machine.  Try 'apt install whois' ")
     sys.exit(0)
 
@@ -178,7 +178,7 @@ def local_whois_query(domain,timeout=0):
     log.debug("local whois query. {} {}".format(domain,timeout))
     perm_error = datetime.datetime.utcnow() + datetime.timedelta(days=30)
     try:
-        use_whois_cmd = True if config.mode==1 else False
+        use_whois_cmd = True if config.mode==0 else False
         whois_rec = whois.whois(domain, command=use_whois_cmd)
     except Exception as e:
         log.debug(f"Error During local whois query {str(e)}")
@@ -192,11 +192,10 @@ def local_whois_query(domain,timeout=0):
         return error_response(f"whois record has no creation date", perm_error)
     today = (datetime.datetime.utcnow()+datetime.timedelta(hours=config.timezone_offset)).strftime("%Y-%m-%d %H:%M:%S")
     data = new_cache_entry(born_on,today,today,-1,{})
-    if config.mode != 3:
+    if config.mode != 2:
         return data
     if not timeout:
         return data
-    log.debug("Good Citizen")
     submit_data = {"action":"update","timeout":timeout,"data":json.dumps(whois_rec,default=dateconverter)}
     try:
         submit_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -226,6 +225,22 @@ def health_check():
         health_thread.start()
     return health_thread
 
+def retrieve_server_config():   
+    log.info("Retrieve server config")
+    submit_data = {"action":"config","database_version":config.database_version,"software_version":software_version}
+    resp_dict = None
+    try:
+        submit_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        submit_socket.settimeout(15)
+        submit_socket.sendto(json.dumps(submit_data,default=dateconverter).encode(), (config.server_name,config.server_port))
+        resp, addr = submit_socket.recvfrom(32768)
+        log.info(f"Server Provided Config {resp}")
+        resp_dict = json.loads(resp)
+    except Exception as e:
+        log.debug(f"Error retrieving server config {str(e)}")
+    return resp_dict
+
+
 @my_lru_cache(maxsize = config.cached_max_items, cacheable = should_item_be_cached)
 def domain_stats(domain): 
     """ Given a domain return a tuple with  """
@@ -243,12 +258,11 @@ def domain_stats(domain):
     
     if "." in domain:
         tld = domain.split(".")[-1]
-        if tld in config.prohibited_tlds:
-            resolved_error+=1
+        if (tld in prohibited_domains) or (domain in prohibited_domains):
+            resolved_db+=1
             return error_response(f"No whois or support for TLD {tld} ", perm_error)
 
     result = database_lookup(domain)
-    #log.debug("Initial database request result", result)
     if result:
         resolved_db += 1
         return result
@@ -256,7 +270,7 @@ def domain_stats(domain):
         if not verify_domain(domain):
             resolved_error+= 1
             return error_response(f"error resolving dns {domain}")
-        if config.mode != 3:
+        if config.mode != 2:
             result = local_whois_query(domain,0)
             result['seen_by_us']="UNSUPPORTED"
             return result
@@ -378,6 +392,7 @@ else:
     log.addHandler(logfile)
     log.setLevel(logging.DEBUG)
 
+software_version = 0.1
 
 if __name__ == "__main__":
     try:
@@ -396,6 +411,22 @@ if __name__ == "__main__":
     resolved_local = resolved_remote = resolved_error = resolved_db  = 0
     database_lock = threading.Lock()
     server = ThreadedDomainStats((config.local_address, config.local_port), domain_api)
+
+    #Get the central server config
+    prohibited_domains = config.prohibited_domains
+    server_config = None
+    if config.mode==2:
+        server_config = retrieve_server_config()
+    log.info(f"Starting with mode {config.mode} Server Provided Config:{server_config}")
+    #If mode isnt 2 OR retrieve_server_config failed this is skipped
+    if server_config:
+        server_prohibited = server_config.get('prohibited_tlds')
+        prohibited_domains.extend(server_prohibited)
+        if "fatal_message" in server_config:
+            message = server_config.get("fatal_message")
+            log.info(f"The central server is forcing this program to stop. Reason {messsage}")
+            print(f"The central server is forcing this program to stop. Reason {messsage}")
+            sys.exit(1)
 
     #start the server
     print('Server is Ready. http://%s:%s/domain.tld' % (config.local_address, config.local_port))
