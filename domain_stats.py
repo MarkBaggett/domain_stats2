@@ -413,7 +413,7 @@ if __name__ == "__main__":
     server = ThreadedDomainStats((config.local_address, config.local_port), domain_api)
 
     #Get the central server config
-    prohibited_domains = config.prohibited_domains
+    prohibited_domains = config.prohibited_tlds
     server_config = None
     if config.mode==2:
         server_config = retrieve_server_config()
