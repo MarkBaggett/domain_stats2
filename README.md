@@ -30,13 +30,13 @@ Lets look at another domain.  Look at markbaggett.com.
 
 ```
 student@573:~/Documents/domain_stats2$ wget -q -O- http://127.0.0.1:8000/markbaggett.com
-{"seen_by_web": "2015-12-12 19:34:59", "seen_by_us": "2019-11-08 10:03:17.411863", "seen_by_you":"FIRST-CONTACT", "rank": -1, "other": "{}"}
+{"seen_by_web": "2015-12-12 19:34:59", "seen_by_us": "2019-06-08 10:03:17.411863", "seen_by_you":"FIRST-CONTACT", "rank": -1, "other": "{}"}
 ```
-The domain markbaggett.com wasn't in the local database on my server so it had to go off and ask the community server for that information. It got back a "seen_by_web" date of 12-12-2015.  This is the domains registration date.  It also has a date for "seen_by_us".  That is the first time ANYONE using domain_stats queried the central server for that domain.  If no one had ever asked about that domain this would have been "FIRST-CONTACT".   
+The domain markbaggett.com wasn't in the local database on my server so it had to go off and ask the community server for that information. It got back a "seen_by_web" date of 12-12-2015.  This is the domains registration date. Technically this is an "ESTABLISHED" domain, but it wasn't in the local database yet. It will probably be pushed to the client database with a future update.  Notice there is a date for "seen_by_us".  That is the first time ANYONE using domain_stats queried the central server for that domain. Someone using domain stats say that back on July 8th. That is a few months ago so it isn't brand new to the community. If no one using domain stats had ever asked about that domain this would have been "FIRST-CONTACT". Last we can see it is again the FIRST-CONTACT for our organization.   
 
 A domain with a very recent "seen_by_web", "seen_by_us" and "seen_by_you" date should be investigated. The vast majority of domains have been around for a few years before they are stable and gain popularity.  Domains used by attackers are usually established shortly before they are used. 
 
-Anytime you see "FIRST-CONTACT" on a domain that has been running for some period of time it is at the least a good thing to be aware of.  If it is the FIRST CONTACT for both you and the community then that is even more interesting.
+Anytime you see "FIRST-CONTACT" on a domain that has been running for some period of time it is at the least a good thing to be aware of.  If it is the FIRST CONTACT for both you and the community then that is even more interesting. (Unless of course you are of the few beta testers where the community is very small and not much different that seen_by_you.)
 
 
 ![Overview](overview.jpg)
