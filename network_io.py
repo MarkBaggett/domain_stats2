@@ -2,12 +2,64 @@ import requests
 import json
 import random
 import datetime
+import logging
+
+
+log = logging.getLogger(__name__)
+logfile = logging.FileHandler('domain_stats.log')
+logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
+logfile.setFormatter(logformat)
+
+#to isc
+#{"command" : "query",  "domain": toplevel.tld}   
+#response:
+    ### ISC Response is a JSON packet in the following format:
+    # { "seen_by_web" =  Domain Created Date in format YYYY-mm-DD HH:MM:SS,   (If domain has multiple dates this is the most recent)
+    #   "expires" = domain expiration date Date in format YYYY-mm-DD HH:MM:SS,  (if domain has multiple dates this is the most recent)
+    #    "seen_by_isc" = date when ISC first queried whoisxml to build this record in format YYYY-mm-DD HH:MM:SS,als
+    #     "alerts"  =  A list of strings to make the user aware of regarding the domain in question (for later use) formta is ['alert1','alert2']
+    ##STub an ISC response
+
+#When a client starts it sends a status to isc.  ISC can force database updates on client, deny client access
+#To isc
+#{"command": "status", "client_version":"client version number","database_version":database version info,  cache_efficiency": [hit,miss,expired], "database_efficiency": [hit,miss]}
+#response:
+# {"current_database_version": "database version expected", "interval": "number of seconds ISC wishes to wait until next status update", "deny_client": "client message"}
+
+def health_check(client_version, database_version, cache, database_stats):
+    #To isc
+    #submit = json.dumps({"command":"status", "client_version":client_version, "database_version":database_version, "cache_efficiency":[cache.hits, cache.miss, cache.expire], "database_efficiency":[database_stats.hits, database_stats.miss])
+    #{"command": "status", "client_version":"client version number","database_version":database version info,  cache_efficiency": [hit,miss,expired], "database_efficiency": [hit,miss]}
+    #response from isc
+    # {"expected_database_version": "database version expected","expected_client_version":client version expected,  "interval": "number of minutes ISC wishes to wait until next status update", "deny_client": "client message", "notice":['messages' 'to' 'client']}
+    #functions returns tuple:
+    #       Position 1 of Tuple is boolean representing "CRITICAL ERROR" which, when True causes the program to abort.
+    #       a list of messages to give to the clients regarding its health and operating ability
+    client_messages = []
+    fake_isc_response = json.dumps({"expected_database_version":0.001, "expected_client_version":1.0, "interval":5, "deny_client":"", "notice":['message1']})
+    isc_response = json.loads(fake_isc_response)
+    expected_database = isc_response.get("expected_database_version")
+    if expected_database != database_version:
+        log.debug(f"Database is out of date. ISC expected {expected_database}. Running {database_version}")
+        return ( True, 0.1 , ["UPDATE-DATABASE", str(expected_database)] ) 
+    expected_client = isc_response.get("expected_client_version")
+    if expected_client != client_version:
+        log.debug(f"Warning Client Software is out of data.")
+        client_messages.append("Your version of domain_stats is out of date.  Please update.")
+    deny_client = isc_response.get("deny_client")
+    if deny_client:
+        client_messages.insert(0, deny_client)
+    client_messages.extend(isc_response.get("notice"))
+    return ( deny_client, isc_response.get("interval", 60), client_messages )
+
 
 def dateconverter(o):
     if isinstance(o, datetime.datetime):
         return o.strftime("%Y-%m-%d %H:%M:%S")
 
 def retrieve_isc(domain):
+    #to isc
+    #{"command" : "query",  "domain": toplevel.tld} 
     ### ISC Response is a JSON packet in the following format:
     # { "seen_by_web" =  Domain Created Date in format YYYY-mm-DD HH:MM:SS,   (If domain has multiple dates this is the most recent)
     #   "expires" = domain expiration date Date in format YYYY-mm-DD HH:MM:SS,  (if domain has multiple dates this is the most recent)

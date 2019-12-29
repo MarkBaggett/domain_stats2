@@ -21,7 +21,7 @@ server_port: 4100
 #This is where the updates to the local database are found
 target_updates: https://raw.githubusercontent.com/MarkBaggett/domain_stats2/master/data
 #This field maintains the update history and is maintained by the software.  You should not change it.
-database_version: '0.2'
+database_version: 0.001
 #ALL timestamps are UTC if you want "seen_my_you" to be in your local timezone make that adjustment here. Example EST=-5 EDT=-4, etc
 timezone_offset: 0
 #Control detail in logging 

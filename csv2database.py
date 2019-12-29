@@ -10,10 +10,10 @@ filename="sample_com_v30_full_1000.csv"
 createstr="""
 CREATE TABLE domains (
  domain text NOT NULL UNIQUE,
- seen_by_web  DATETIME DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
- expires  DATETIME DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
- seen_by_isc DATETIME DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
- seen_by_you  DATETIME DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
+ seen_by_web timestamp not NULL,
+ expires timestamp not NULL,
+ seen_by_isc timestamp not NULL,
+ seen_by_you timestamp not NULL
 );
 """
 

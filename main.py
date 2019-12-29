@@ -17,7 +17,7 @@ GOAL is the followign records
 }
 
 #database record
-#domain, web_born_on, web_expires, Rank, seen_by_you   #Rank will contain ISC date for >100M records
+d#Rank will contain ISC date for >100M records
 
 #Cache Records ???   Just straight json answers or calculated?
 #Cache is straight JSON responses.  CAN NOT CACHE anything with FIRSTCONTACT
@@ -39,7 +39,7 @@ def main_logic(domain):
                 record.seen_by_you = datetime.datetime.utcnow()
                 alert_first_you = True
                 update_record_in_database(domain, record)
-            cache_data.set(domain, record)
+            cache_data.set(domain, record, hours)
         else:
             #Even if the ISC responds with an error that still goes in the cache
             alert_first_you = True

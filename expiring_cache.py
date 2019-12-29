@@ -5,6 +5,18 @@ import sys
 import pickle
 import threading
 
+class cache_stats:
+    def __init__(self,hit=0, miss=0, expire=0):
+        self.hit = hit
+        self.miss = miss
+        self.expire = expire
+
+    def __repr__(self):
+        return f"cache_stats(hit={self.hit}, miss={self.miss}, expire={self.expire})"
+
+    def reset(self):
+        self.hit = self.miss = self.expire = 0
+
 
 class ExpiringCache(collections.OrderedDict, collections.Counter):
     """This is a Least Recently Used Expiring Cache. Reading or setting a record makes it the most recently used.
@@ -16,19 +28,14 @@ class ExpiringCache(collections.OrderedDict, collections.Counter):
         self.maxsize = maxsize
         #Set to -1 for no expirations and it behaves like a regular LRU cache 
         self.hours_to_live = default_hours_to_live
-        self.hit = self.miss = self.expired = 0
+        self.stats = cache_stats()
         self.update_lock = threading.Lock()
         super().__init__()
 
     def cache_info(self):
         """Report cache statistics"""
-        rpt =  f"""
-HITS: {self.hit} \nMISS {self.miss}\nEXPIRED {self.expired}\nMax Size: {self.maxsize} (Current size is {len(self)})\n
-Memory Usage: Cache Bytes={sys.getsizeof(self)} Application Kilobytes={resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}"""
+        rpt =  f"""{self.stats}, ('Max Size': {self.maxsize}, 'Current size': {len(self)}, 'Cache Bytes':{sys.getsizeof(self)}, 'Application Kilobytes':{resource.getrusage(resource.RUSAGE_SELF).ru_maxrss})"""
         return rpt
-
-    def reset_info(self):
-        self.hit = self.miss = self.expired = 0
 
     def cache_dump(self, fname):
         with open(fname,"wb") as fhandle:
@@ -51,14 +58,14 @@ Memory Usage: Cache Bytes={sys.getsizeof(self)} Application Kilobytes={resource.
             expiration, read_count, data = super().__getitem__(key)
             del self[key]
             if expiration > datetime.datetime.utcnow() or (expiration < 0):
-                self.hit +=1
+                self.stats.hit +=1
                 with self.update_lock:
                     super().__setitem__(key, (expiration, read_count+1, data))
                 return data
             else:
-                self.expired += 1
+                self.stats.expired += 1
         else:
-            self.miss +=1
+            self.stats.miss +=1
         return None
 
     def enforce_size(self):
