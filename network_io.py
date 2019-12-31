@@ -36,7 +36,7 @@ def health_check(client_version, database_version, cache, database_stats):
     #       Position 1 of Tuple is boolean representing "CRITICAL ERROR" which, when True causes the program to abort.
     #       a list of messages to give to the clients regarding its health and operating ability
     client_messages = []
-    fake_isc_response = json.dumps({"expected_database_version":0.001, "expected_client_version":1.0, "interval":5, "deny_client":"", "notice":['message1']})
+    fake_isc_response = json.dumps({"expected_database_version":1.0, "expected_client_version":1.0, "interval":5, "deny_client":"", "notice":['message1']})
     isc_response = json.loads(fake_isc_response)
     expected_database = isc_response.get("expected_database_version")
     if expected_database != database_version:
@@ -70,13 +70,26 @@ def retrieve_isc(domain):
     fake_date1 = random.choice([fake_date1, "FIRST-CONTACT"])
     fake_date2 = (datetime.datetime.now() - datetime.timedelta(days=random.randrange(365,3000))).replace(microsecond=0).isoformat().replace("T"," ")
     fake_date3 = (datetime.datetime.now() + datetime.timedelta(days=random.randrange(365,3000))).replace(microsecond=0).isoformat().replace("T"," ")
-    
-    fake_isc_response = json.dumps({"seen_by_web":fake_date2, "expires":fake_date3, "seen_by_isc":fake_date1, "alerts":[]}, default=dateconverter)
+    fake_isc_response1 = json.dumps({"seen_by_web":fake_date2, "expires":fake_date3, "seen_by_isc":fake_date1, "alerts":[]}, default=dateconverter)
+    #ISC can also generate Error responses and define how long the error is cached on the client (preventing repeated queries)
+    #Those responses look like this:
+    #{ "seen_by_web" = "ERROR",
+    #   "expires = "ERROR"
+    #   "seen_by_isc = hours to live for this error in client cache for the queried domain. 0=dont cache,-1=dont expire but allow lru,-2=permenant (use with caution)"
+    #   "alerts" = ['alert1','alert2' ]  list if alerts to associate with this query.  }
+    fake_error_ttl = random.randrange(-1,5)
+    alertoptions= ['bad thing happened', 'domain doesnt exist','login expired','isc temporarily unavailable', 'bad domain','bad record from registrar','unable to connect to whois']
+    fake_alerts = [random.choice(alertoptions) for _ in range(random.randrange(1,3))]
+    fake_isc_response2 = json.dumps({"seen_by_web":"ERROR", "expires":"ERROR", "seen_by_isc":fake_error_ttl, "alerts":fake_alerts}, default=dateconverter)
+    fake_isc_response = random.choice([ fake_isc_response1]*5 + [fake_isc_response2])
     #Process ISC response
     resp = json.loads(fake_isc_response)
-    web = datetime.datetime.strptime(resp['seen_by_web'], '%Y-%m-%d %H:%M:%S')
-    expire = datetime.datetime.strptime(resp['expires'], '%Y-%m-%d %H:%M:%S')
-    isc = resp['seen_by_isc']
-    if isc != "FIRST-CONTACT":
-        isc = datetime.datetime.strptime(resp['seen_by_isc'], '%Y-%m-%d %H:%M:%S')
-    return (web,expire, isc, resp['alerts']) 
+    web = resp['seen_by_web']
+    if web != "ERROR":
+        web = datetime.datetime.strptime(web, '%Y-%m-%d %H:%M:%S')
+        expire = datetime.datetime.strptime(resp['expires'], '%Y-%m-%d %H:%M:%S')
+        isc = resp['seen_by_isc']
+        if isc != "FIRST-CONTACT":
+            isc = datetime.datetime.strptime(isc, '%Y-%m-%d %H:%M:%S')
+        return (web,expire, isc, resp['alerts'])
+    return ("ERROR","ERROR", resp['seen_by_isc'], resp['alerts'])

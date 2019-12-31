@@ -1,7 +1,7 @@
 #This is the maximum number of items to hold in the memory cache 
 cached_max_items: 65536
 #This is the path to the sqlite database that contains the domain information
-database_file: domain_stats.db
+database_file: dstat.db
 #Mode=Use this to control how domain stats resolves hosts that are not in the database
 #Set to 0=Only Local Whois exec via cli,1=Only Local Whois via python,2=Whois Lookup central domain stats with local whois fallback
 mode: 2
@@ -21,7 +21,7 @@ server_port: 4100
 #This is where the updates to the local database are found
 target_updates: https://raw.githubusercontent.com/MarkBaggett/domain_stats2/master/data
 #This field maintains the update history and is maintained by the software.  You should not change it.
-database_version: 0.001
+database_version: 1.0
 #ALL timestamps are UTC if you want "seen_my_you" to be in your local timezone make that adjustment here. Example EST=-5 EDT=-4, etc
 timezone_offset: 0
 #Control detail in logging 

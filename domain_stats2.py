@@ -51,11 +51,11 @@ def health_check():
     #   Messages to pass on to client  
     global health_thread    
     log.debug("Submit Health Check")
-    critical, interval, messages = network_io.health_check(software_version, database_version, cache, database_stats)
+    critical, interval, messages = network_io.health_check(software_version, database_version, cache, database.stats)
     if critical:
         if messages[0] == 'UPDATE-DATABASE':
-            database_stats.insert += database_io.update_database(messages[1])
-    critical, interval, messages = network_io.health_check(software_version, database_version, cache, database_stats)
+            database.update_database(messages[1], config)
+    critical, interval, messages = network_io.health_check(software_version, database_version, cache, database.stats)
     if critical:
         stop_msg = "Domain Stats will not start as a result of a critical error.\n"
         stop_msg += "Please resolve the following error(s):\n"
@@ -97,6 +97,7 @@ def reduce_domain(domain_in):
             #print("trim top part", domain_in, domain)
     else:
         domain = ".".join(parts)
+    log.debug(f"Trimmed domain from {domain_in} to {domain.lower()}")
     return domain.lower()
 
 def load_config():
@@ -110,10 +111,10 @@ def json_response(web,isc,you,cat,alert):
 
 def domain_stats(domain):
     global cache
-    print(cache.keys(), cache.cache_info())
+    log.debug(f"New Request for domain {domain}.  Here is the cache info:", cache.keys(), cache.cache_info())
     #First try to get it from the Memory Cache
     domain = reduce_domain(domain)
-    print(f"In cache?  {domain in cache}")
+    log.debug(f"Is the domain in cache?  {domain in cache}")
     if domain in cache:
         cache_data =  cache.get(domain)
         #Could still be None as expiration is only determined upon get()
@@ -122,11 +123,9 @@ def domain_stats(domain):
     #If it isn't in the memory cache check the database
     else:
         #import pdb;pdb.set_trace()
-        record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you = database_io.retrieve(dbpath, domain)
-        #TODO:   FIGURE OUT - Expire cache record when the domain record expires to force requisition? Expired records in DB go to ISC?
+        record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you = database.get_record(domain)
         if record_seen_by_web:
-            database_stats.hit += 1
-            #Found it in the database. Cache it 
+            #Found it in the database. Calculate categories and alerts then cache it 
             category = "NEW"
             alerts = []
             #if not expires and its doesn't expire for two years then its established.
@@ -135,21 +134,33 @@ def domain_stats(domain):
             if record_seen_by_you == "FIRST-CONTACT":
                 record_seen_by_you = (datetime.datetime.utcnow()+datetime.timedelta(hours=config['timezone_offset']))
                 alerts.append("YOUR-FIRST-CONTACT")
-                database_io.update(dbpath, domain, record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you)
+                database.update_record(domain, record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you)     
             if alerts:
+                #If there are alerts then it is a first contact so we do not cache it            
                 cache_expiration = 0
             else:
+                #If there are no alerts we cache it for 30 days (720 hours) or domain expiration (which ever comes first)
                 until_expires = datetime.datetime.utcnow() - record_expires
                 cache_expiration = min( 720 , (until_expires.seconds//360))
             resp = json_response(record_seen_by_web, record_seen_by_isc, record_seen_by_you,category,alerts)
             cache.set(domain,resp, hours_to_live=cache_expiration)
-            print("New Cache Entry!",cache.keys(), cache.cache_info())
+            log.debug("New Cache Entry!",cache.keys(), cache.cache_info())
             return resp
         else:
-            #Even if the ISC responds with an error that still goes in the cache
-            database_stats.miss += 1
+            #Your here so its not in the database look to the isc?
+            #if the ISC responds with an error put that in the cache
             alerts = ["YOUR-FIRST-CONTACT"]
-            isc_seen_by_web, isc_expires, isc_seen_by_isc, isc_seen_by_you = network_io.retrieve_isc(domain)
+            isc_seen_by_you = (datetime.datetime.utcnow()+datetime.timedelta(hours=config['timezone_offset']))
+            isc_seen_by_web, isc_expires, isc_seen_by_isc, isc_alerts = network_io.retrieve_isc(domain)
+            #handle code if the ISC RETURNS AN ERROR HERE
+            #Handle it.  Cache the error for some period of time.
+            #If it isn't an error then its a new entry for the database (only) no cache
+            if isc_seen_by_web == "ERROR":
+                cache_expiration = isc_seen_by_isc
+                resp = json_response("ERROR","ERROR","ERROR","ERROR",isc_alerts)
+                cache.set(domain, resp, hours_to_live=cache_expiration)
+                return resp
+            #here the isc returned a good record for the domain. Put it in the database and calculate an uncached response
             category = "NEW"
             #if not expires and its doesn't expire for two years then its established.
             if isc_seen_by_web < (datetime.datetime.utcnow() - datetime.timedelta(days=365*2)):
@@ -157,16 +168,18 @@ def domain_stats(domain):
             if isc_seen_by_isc == "FIRST-CONTACT":
                 alerts.append("ISC-FIRST-CONTACT")
                 isc_seen_by_isc = (datetime.datetime.utcnow()+datetime.timedelta(hours=config['timezone_offset']))
-            if alerts:
-                cache_expiration = 0
-            else:
-                until_expires = datetime.datetime.utcnow() - isc_expires
-                cache_expiration = min( 720 , (until_expires.seconds//360))
             resp = json_response(isc_seen_by_web, isc_seen_by_isc, isc_seen_by_you, category, alerts )
-            print(f"Adding {domain} to cache {resp}")
-            #Since this will always have a "YOURFIRSTCONTACT" alert these should never be cached?  Only add to database for next request.
-            #cache.set(domain, resp, hours_to_live=cache_expiration) 
-            database_io.update(dbpath, domain, isc_seen_by_web, isc_expires, isc_seen_by_isc, datetime.datetime.utcnow())
+            #Build a response just for the cache that stores ISC alerts for 24 hours. 
+            #alert.remove("YOUR-FIRST_CONTACT")
+            #alert.remove("ISC-FIRST-CONTACT")
+            #if alerts:
+            #   cache_expiration = 24     #Alerts are only cached for 24 hours
+            #else:
+            #   until_expires = datetime.datetime.utcnow() - isc_expires
+            #   cache_expiration = min( 720 , (until_expires.seconds//360))
+            #cache_response = json_response(isc_seen_by_web, isc_seen_by_isc, isc_seen_by_you, category, alerts )
+            #cache.set(domain, cache_response, cache_expiration)
+            database.update_record(domain, isc_seen_by_web, isc_expires, isc_seen_by_isc, datetime.datetime.utcnow())
             return resp
 
 
@@ -180,10 +193,13 @@ class domain_api(http.server.BaseHTTPRequestHandler):
             domain = re.search(r"[\/](.*)$", urlpath).group(1)
             #log.debug(domain)
             if domain == "stats":
-                result = str(cache.cache_info()).encode()
+                result = str(cache.cache_info()).encode() + b"\n"
+                result += str(database.stats).encode()
+            elif domain == "showcache":
+                result = str(cache.cache_report()).encode()
             else:
                 domain = reduce_domain(domain)
-                result = domain_stats(domain)
+                result = domain_stats(domain) 
             self.wfile.write(result)
         else:
             api_hlp = 'API Documentation\nhttp://%s:%s/domain.tld   where domain is a non-dotted domain and tld is a valid top level domain.' % (self.server.server_address[0], self.server.server_address[1])
@@ -203,22 +219,13 @@ class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
         http.server.HTTPServer.__init__(self, *args, **kwargs)
 
 config = config.config("domain_stats.yaml")
-print(config['database_file'])
 cache = expiring_cache.ExpiringCache()
-database_stats = database_io.database_stats()
+database = database_io.DomainStatsDatabase(config['database_file'])
+
 log = logging.getLogger(__name__)
 logfile = logging.FileHandler('domain_stats.log')
 logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
 logfile.setFormatter(logformat)
-
-
-dbpath = pathlib.Path().cwd() / config['database_file']
-dbpath = pathlib.Path().cwd() / "dstat.db"
-
-if not dbpath.exists():
-    print("No database was found. Try running database_admin.py --rebuild to create it.")
-    sys.exit(0)
-
 if config['log_detail'] == 0:
     log.setLevel(level=logging.CRITICAL)
 elif config['log_detail'] == 1:
@@ -230,6 +237,7 @@ else:
 
 software_version = 0.1
 database_version = config['database_version']
+
 
 if __name__ == "__main__":
     #try:
@@ -266,8 +274,8 @@ if __name__ == "__main__":
 
     try:
         server_thread.start()
-        #code.interact(local=locals())
-        while True: time.sleep(100)
+        code.interact(local=locals())
+        #while True: time.sleep(100)
     except (KeyboardInterrupt, SystemExit):
         server.shutdown()
         server.server_close()

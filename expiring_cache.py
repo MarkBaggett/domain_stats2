@@ -4,6 +4,12 @@ import resource
 import sys
 import pickle
 import threading
+import logging 
+
+log = logging.getLogger(__name__)
+logfile = logging.FileHandler('domain_stats.log')
+logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
+logfile.setFormatter(logformat)
 
 class cache_stats:
     def __init__(self,hit=0, miss=0, expire=0):
@@ -33,8 +39,17 @@ class ExpiringCache(collections.OrderedDict, collections.Counter):
         super().__init__()
 
     def cache_info(self):
-        """Report cache statistics"""
+        """JSON transmitable Report cache performance statistics"""
         rpt =  f"""{self.stats}, ('Max Size': {self.maxsize}, 'Current size': {len(self)}, 'Cache Bytes':{sys.getsizeof(self)}, 'Application Kilobytes':{resource.getrusage(resource.RUSAGE_SELF).ru_maxrss})"""
+        return rpt
+
+    def cache_report(self):
+        """Detailed info about the cache for local consumption only"""
+        rpt = "Cache Report\n{0:-^80}  {1:-^9}  {2:-^26}  {3}\n".format("DOMAIN","COUNT","EXPIRES","RECORD---->")
+        for domain,rec in sorted(self.items(),key = lambda entry:entry[1][1], reverse=True):
+            exp, cnt, entry = rec
+            rpt += "{0: ^80}  {1:0>9}  {2: ^20}  {3}\n".format(domain,cnt,str(exp),entry)
+        log.info(rpt)
         return rpt
 
     def cache_dump(self, fname):
@@ -55,15 +70,17 @@ class ExpiringCache(collections.OrderedDict, collections.Counter):
 
     def __getitem__(self, key):
         if key in self:
+            #import pdb;pdb.set_trace()
             expiration, read_count, data = super().__getitem__(key)
             del self[key]
-            if expiration > datetime.datetime.utcnow() or (expiration < 0):
+            #If it set to never expire or it is not expired then update the hit count and recreate the record.
+            if (type(expiration)==int and expiration<0) or (type(expiration)==datetime.datetime and (expiration > datetime.datetime.utcnow())):
                 self.stats.hit +=1
                 with self.update_lock:
                     super().__setitem__(key, (expiration, read_count+1, data))
                 return data
             else:
-                self.stats.expired += 1
+                self.stats.expire += 1
         else:
             self.stats.miss +=1
         return None

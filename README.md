@@ -1,20 +1,28 @@
 # domain_stats2
 
-This is a beta.. Not even really a public one so if you stumbled onto this your welcome to look.  Email me before using it.
+ATTENTION:    THIS CODE BASE IS CURRENTLY BROKEN!!
+
+I have some exciting news.  The SANS isc is providing some funding and will pay for whois API access.   This improves the data quality and reliability but it completely changes the way I access the data.  This requires a significant rewrite.  This is in a transitional state right now as I move from the old to the new. 
+
+
+
 
 This is a complete rewrite and new approach to managing baby domains in your organization.  Based on feedback from the community Domain_stats was really only used for baby domain information.  This new iteration focuses on that data and how to make it useful.  In this process it now tracks "FIRST CONTACT" so you know when your organization is has contacted a domain that you have not seen before.
 
 The domain stats client is focused on quickly giving you 5 pieces of data for every domain name you ask it for.  That is when the domain was first seen by you, when it was first seen by the security community and when it was first seen by the web.
 
-SEEN_BY_YOU - Values: FIRST-CONTACT or CreationDate
+SEEN_BY_YOU - Values: Date First Seen by you
 
-SEEN_BY_US  - Values: ESTABLISHED, FIRST-CONTACT, UNAVAILABLE or CreationDate
+SEEN_BY_ISC  - Values: NA or Date First seen by ISC  (NA indicates that it was resolved by the local database no ISC is required.)
 
-SEEN_BY_WEB - Values: ESTABLISHED, CreationDate
+SEEN_BY_WEB - Values: CreationDate
 
-RANK        - Values: An approximation of the domains position in the Alexa top 1 million.  -1 if not in the top 1m
+CATEGORY    - NEW or ESTABLISHED  (indicating whether it is less than 2 years old since the SEEN_BY_WEB date)
 
-OTHER       - Values: Central server may provide additional data here such as warning for low freq scores, known malicious domains,e tc.
+ALERT      -  List of alerts regarding this domain.   Including:
+              YOU-FIRST-CONTACT  - This request is first time you have ever seen this domain on your network
+              ISC-FIRST-CONTACT  - This is the first time any domain_stats user has seen this domain on their network
+              <other>  - The ISC may add other alert for a domain 
 
 
 Here are some examples of how these are useful.
@@ -22,21 +30,21 @@ If your SIEM sees a request for google.com that is not a new domain and has been
 
 ```
 student@573:~/Documents/domain_stats2$ wget -q -O- http://127.0.0.1:8000/google.com
-{"seen_by_web": "ESTABLISHED", "seen_by_us": "ESTABLISHED", "seen_by_you": "FIRST-CONTACT", "rank": 1, "other": "{}"}
+{"seen_by_web": "1998-10-08 07:30:02", "seen_by_isc": "NA", "seen_by_you": "2019-12-24 15:30:02", "category": "ESTABLISHED", "alerts": ['YOU-FIRST-CONTACT']}
 ```
-When the domain has been around for more than two years domain stats responds and tells you that is an "ESTABLISHED" domain.  Notice that SEEN_BY_YOU is set to "FIRST-CONTACT". Since this is a brand new domain stats installation this is the first time my organization has ever queried google.  Every subsequent request will have the date and time when that wget query was run. You will only see "FIRST-CONTACT" once for each domain. Then it will be the date of that first contact. I also have some useful information like its "RANK" in the alexa top 1M. Website ranks change from time to time and this information is not the focus of this data.  It is just there to give you an idea of the popularity of the site.
-
+When the domain has been around for more than two years domain stats responds and tells you that is an "ESTABLISHED" domain.  Notice that ALERTS is set to "YOU-FIRST-CONTACT". Since this is a brand new domain stats installation this is the first time my organization has ever queried google.  You will only see "YOU-FIRST-CONTACT" once for each domain. Also "SEEN_BY_ISC" is set to NA indicating that this query was resolved locally by your domain client and it didn't need to talk to the ISC.  That means that this is a well known established domain that has been around for a long time and your local client has it in its database.  Generally speaking you can most likely ignore the NA SEEN_BY_ISC domains.
+ 
 Lets look at another domain.  Look at markbaggett.com.
 
 ```
 student@573:~/Documents/domain_stats2$ wget -q -O- http://127.0.0.1:8000/markbaggett.com
-{"seen_by_web": "2015-12-12 19:34:59", "seen_by_us": "2019-06-08 10:03:17.411863", "seen_by_you":"FIRST-CONTACT", "rank": -1, "other": "{}"}
+{"seen_by_web": "2015-12-12 19:34:59", "seen_by_us": "2019-06-08 10:03:17", "seen_by_you":"2019-06-08 10:03:17", "category": "ESTABLISHED", "alerts": ['YOU-FIRST-CONTACT'] 
 ```
-The domain markbaggett.com wasn't in the local database on my server so it had to go off and ask the community server for that information. It got back a "seen_by_web" date of 12-12-2015.  This is the domains registration date. Technically this is an "ESTABLISHED" domain, but it wasn't in the local database yet. It will probably be pushed to the client database with a future update.  Notice there is a date for "seen_by_us".  That is the first time ANYONE using domain_stats queried the central server for that domain. Someone using domain stats say that back on July 8th. That is a few months ago so it isn't brand new to the community. If no one using domain stats had ever asked about that domain this would have been "FIRST-CONTACT". Last we can see it is again the FIRST-CONTACT for our organization.   
+The domain markbaggett.com wasn't in the local database on my server so it had to go off and ask the SANS Internet Storm Center server for that information. It got back a "seen_by_web" date of 12-12-2015.  This is the domains registration date. The category indicates that this is an "ESTABLISHED" domain.  It will probably be added to the client database for all future queries.  Notice there is a date for "seen_by_isc".  That is the first time ANYONE using domain_stats queried the central server for that domain. Someone using domain stats ask about that domain that back on July 8th. That is a few months ago so it isn't brand new to the community. If no one using domain stats had ever asked about that domain there would have been an additional alert that says "ISC-FIRST-CONTACT". Last we can see it is again the YOU-FIRST-CONTACT alert for our organization.   
 
 A domain with a very recent "seen_by_web", "seen_by_us" and "seen_by_you" date should be investigated. The vast majority of domains have been around for a few years before they are stable and gain popularity.  Domains used by attackers are usually established shortly before they are used. 
 
-Anytime you see "FIRST-CONTACT" on a domain that has been running for some period of time it is at the least a good thing to be aware of.  If it is the FIRST CONTACT for both you and the community then that is even more interesting. (Unless of course you are of the few beta testers where the community is very small and not much different that seen_by_you.)
+Anytime you see a "???-FIRST-CONTACT" on a domain that has been running for some period of time it is at the least a good thing to be aware of.  If it is the FIRST CONTACT for both you and the community then that is even more interesting. (Unless of course you are of the few beta testers where the community is very small and not much different that seen_by_you.)
 
 
 ![Overview](overview.jpg)
