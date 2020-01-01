@@ -10,37 +10,9 @@ import pathlib
 import datetime
 import urllib
 import sys
-from dstat_utils import reduce_domain, load_config, verify_domain, new_domain, get_db, update_config
-
-
-createstr="""
-CREATE TABLE domains (
- domain_id INTEGER PRIMARY KEY AUTOINCREMENT,
- domain text NOT NULL UNIQUE,
- seen_by_web timestamp not NULL,
- seen_by_us timestamp not NULL,
- seen_by_you timestamp not NULL,
- rank INTEGER DEFAULT -1,
- other BLOB
-);
-"""
-
-
-#sqlite dump establishe to txt
-#.headers off
-#.mode csv
-#.output 2.txt
-#select domain from domains where seen_by_web <  date('now','-2 years');
-#.quit
-
-
-lock = threading.Lock()
-
-def create_tables():
-    datab = get_db()
-    cursor = datab.cursor()
-    cursor.execute(createstr)
-    datab.commit();
+import database_io
+import network_io
+import config
 
 
 def check_update():
@@ -112,22 +84,25 @@ def get_updates(latest_version):
         config = update_config(database_version= version)
 
 if __name__ == "__main__":
-    config = load_config()
+    config = config.config("domain_stats.yaml")
+    database = database_io.DomainStatsDatabase(config['database_file'])
+    server_config = network_io.get_server_config()
+
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-f','--firstcontacts',action="store_true",required=False,help='Reset all domains to First-Contact on the local system (seen-by-me)')
-    parser.add_argument('--rebuild',action="store_true",required=False,help='Erase and rebuild the entire database to the latest version')
+    parser.add_argument('-c','--create',action="store_true",required=False,help='Create the specified database. (Erases and overwrites existing files.)')
     parser.add_argument('-u','--update',action="store_true", required=False,help='Update the database established domains.')
     parser.add_argument('-v','--version',action="store_true", required=False,help='Check database version')
-    parser.add_argument('--verify',action="store_true", help='Verify each addition with DNS (slow)')
+    parser.add_argument('filename', help = "The name or path/name to the sqlite database to perform operations on.")
  
     args = parser.parse_args()
 
     if args.firstcontacts:
         reset_first_contact()
-    elif args.rebuild:
-        if input("Are you sure?  This will destroy the database.").lower().startswith("y"):
-            reset_database(check_update())
+    elif args.create:
+        if input("Are you sure?  This will destroy any existing file with that name.").lower().startswith("y"):
+            database.create_file(args.filename)
     elif args.update:
         get_updates(check_update())
     elif args.version:

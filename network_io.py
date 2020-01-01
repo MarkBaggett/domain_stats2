@@ -52,6 +52,19 @@ def health_check(client_version, database_version, cache, database_stats):
     client_messages.extend(isc_response.get("notice"))
     return ( deny_client, isc_response.get("interval", 60), client_messages )
 
+def get_server_config():
+    #To isc
+    #submit = json.dumps({"command":"config"}, "client_version":client_version, "database_version":database_version})
+    # 
+    #response from isc
+    # {"expected_database_version": "database version expected","expected_client_version":client version expected, "prohibited_tlds":['.local' 'to' 'arpa']}
+    #resp = request.post( , configrequest)
+    resp = json.loads(json.dumps({'expected_database_version':1.0, 'expected_client_version':1.0, 'prohibited_tlds': ['.local', '.arpa'] }))
+    if sorted(resp.keys()) != ['expected_client_version', 'expected_database_version', 'prohibited_tlds']:
+        print(f"Invalid ISC response requesting server config {resp}")
+        log.info(f"Invalid ISC response requesting server config {resp}")
+    return resp
+
 
 def dateconverter(o):
     if isinstance(o, datetime.datetime):
@@ -84,6 +97,9 @@ def retrieve_isc(domain):
     fake_isc_response = random.choice([ fake_isc_response1]*5 + [fake_isc_response2])
     #Process ISC response
     resp = json.loads(fake_isc_response)
+    if sorted(resp.keys()) != ['alerts', 'expires', 'seen_by_isc', 'seen_by_web']:
+        log.info(f"INVALID ISC RESPONSE MISSING KEY FIELDS {resp}")
+        raise Exception("ISC RESPONSE to domain request MISSING KEY FIELDS.")
     web = resp['seen_by_web']
     if web != "ERROR":
         web = datetime.datetime.strptime(web, '%Y-%m-%d %H:%M:%S')

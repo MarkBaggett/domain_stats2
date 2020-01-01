@@ -20,6 +20,21 @@ class database_stats:
     def __repr__(self):
         return f"database_stats(hit={self.hit},miss={self.miss},insert={self.insert},delete={self.delete})"
 
+def reduce_domain(domain_in):
+    parts =  domain_in.strip().split(".")
+    if len(parts)> 2: 
+        if parts[-1] not in ['com','org','net','gov','edu']:
+            if parts[-2] in ['co', 'com','ne','net','or','org','go','gov','ed','edu','ac','ad','gr','lg','mus','gouv']:
+                domain = ".".join(parts[-3:])
+            else:
+                domain = ".".join(parts[-2:])
+        else:
+            domain = ".".join(parts[-2:])
+            #print("trim top part", domain_in, domain)
+    else:
+        domain = ".".join(parts)
+    return domain.lower()
+
 class DomainStatsDatabase(object):
 
     def __init__(self, filename):
@@ -27,14 +42,27 @@ class DomainStatsDatabase(object):
         self.lock = threading.Lock()
         self.stats = database_stats()
         if not pathlib.Path(self.filename).exists():
-            raise Exception(f"Database not found. {self.filename}")
+            print(f"WARNING: Database not found. {self.filename}")
+            return
+        db = sqlite3.connect(filename, timeout=15)
+        cursor = db.cursor()
+        self.version,self.created,self.lastupdate = cursor.execute("select version,created,lastupdate from info").fetchone()
+
+    def create_file(self, filename):
+        datab = sqlite3.connect(filename)
+        cursor = datab.cursor()
+        cursor.execute("CREATE TABLE domains (domain text NOT NULL UNIQUE,seen_by_web timestamp not NULL,expires timestamp not NULL,seen_by_isc timestamp not NULL,seen_by_you timestamp not NULL)")
+        cursor.execute("CREATE TABLE info (version real NOT NULL,created timestamp not NULL,lastupdate timestamp not NULL)")
+        cursor.execute("insert into info (version, created, lastupdate) values (?,?,?)", (1.0, datetime.datetime.utcnow(), datetime.datetime.utcnow()))
+        datab.commit()
 
     def update_record(self, domain, record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you):
         record_seen_by_web = record_seen_by_web.strftime('%Y-%m-%d %H:%M:%S')
         record_expires = record_expires.strftime('%Y-%m-%d %H:%M:%S')
-        if record_seen_by_isc != "NA":
+        if record_seen_by_isc != "LOCAL":
             record_seen_by_isc = record_seen_by_isc.strftime('%Y-%m-%d %H:%M:%S')
-        record_seen_by_you = record_seen_by_you.strftime('%Y-%m-%d %H:%M:%S')
+        if record_seen_by_you != "FIRST-CONTACT":
+            record_seen_by_you = record_seen_by_you.strftime('%Y-%m-%d %H:%M:%S')
         db = sqlite3.connect(self.filename, timeout=15)
         cursor = db.cursor()
         log.info("Writing to database {} {} {} {} {} {}".format(self.filename, domain, record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you))
@@ -78,7 +106,7 @@ class DomainStatsDatabase(object):
                 db.commit()
                 self.stats.delete += 1
             return (None,None,None,None)
-        if isc != "NA":
+        if isc != "LOCAL":
             isc = datetime.datetime.strptime(isc, '%Y-%m-%d %H:%M:%S')
         if you != "FIRST-CONTACT":
             you = datetime.datetime.strptime(you, '%Y-%m-%d %H:%M:%S')
@@ -103,12 +131,14 @@ class DomainStatsDatabase(object):
         for pos,entry in enumerate(new_domains):
             if pos % 50 == 0:
                 print("\r|{0:-<50}| {1:3.2f}%".format("X"*( 50 * pos//num_recs), 100*pos/num_recs),end="")
-            command, domain, web, expires, isc = entry.strip().split(",")
+            command, domain, web, expires = entry.strip().split(",")
             domain = reduce_domain(domain)
+            web = datetime.datetime.strptime(web, '%Y-%m-%d %H:%M:%S')
+            expires = datetime.datetime.strptime(expires, '%Y-%m-%d %H:%M:%S')
             if command == "+":
                 record = cursor.execute("select seen_by_web, expires, seen_by_isc, seen_by_you from domains where domain = ?" , (domain,) ).fetchone()
                 if not record:
-                    self.update_record(domain, web, expires, isc, "FIRST-CONTACT")
+                    self.update_record(domain, web, expires,"LOCAL", "FIRST-CONTACT")
                     log.debug(f"Record added to database for domain {domain}")
                 else:
                     log.debug(f"Record already exists skipped {domain}")
@@ -135,4 +165,10 @@ class DomainStatsDatabase(object):
             dst_path = pathlib.Path().cwd() / "data" / f"{current_major}" / f"{update}.txt"
             urllib.request.urlretrieve(tgt_url, str(dst_path))
             new_records_count += process_update_file(str(dst_path))
+        self.version = latest_version
+        self.lastupdate = datetime.datetime.utcnow()
+        db = sqlite3.connect(self.filename, timeout=15)
+        cursor = db.cursor()
+        cursor.execute("update info set version=?, lastupdate=?",(self.version, self.lastupdate))
+        db.commit()
         return latest_version, new_record_count
