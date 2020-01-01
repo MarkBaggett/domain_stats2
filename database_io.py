@@ -54,8 +54,11 @@ class DomainStatsDatabase(object):
         cursor = datab.cursor()
         cursor.execute("CREATE TABLE domains (domain text NOT NULL UNIQUE,seen_by_web timestamp not NULL,expires timestamp not NULL,seen_by_isc timestamp not NULL,seen_by_you timestamp not NULL)")
         cursor.execute("CREATE TABLE info (version real NOT NULL,created timestamp not NULL,lastupdate timestamp not NULL)")
-        cursor.execute("insert into info (version, created, lastupdate) values (?,?,?)", (1.0, datetime.datetime.utcnow(), datetime.datetime.utcnow()))
+        new_info = (1.0, datetime.datetime.utcnow(), datetime.datetime.utcnow())
+        cursor.execute("insert into info (version, created, lastupdate) values (?,?,?)", new_info)
         datab.commit()
+        self.version, self.created, self.last_update = new_info
+
 
     def update_record(self, domain, record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you):
         record_seen_by_web = record_seen_by_web.strftime('%Y-%m-%d %H:%M:%S')

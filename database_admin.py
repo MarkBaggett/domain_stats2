@@ -103,6 +103,9 @@ if __name__ == "__main__":
     if args.create:
         if input("Are you sure?  This will destroy any existing file with that name.").lower().startswith("y"):
             database.create_file(args.filename)
+        else:
+            print("aborting.")
+            sys.exit(0)
     if args.update:
         critical, interval, messages = network_io.health_check(1.0, database.version, cache, database.stats)
         if critical:
