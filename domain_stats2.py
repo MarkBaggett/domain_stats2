@@ -71,7 +71,7 @@ def health_check():
 
 def retrieve_server_config():   
     log.info("Retrieve server config")
-    submit_data = {"action":"config","database_version":config['database_version'],"software_version":software_version}
+    submit_data = {"action":"config","database_version":database.version,"software_version":software_version}
     resp_dict = None
     try:
         submit_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -143,7 +143,8 @@ def domain_stats(domain):
                 until_expires = datetime.datetime.utcnow() - record_expires
                 cache_expiration = min( 720 , (until_expires.seconds//360))
             resp = json_response(record_seen_by_web, record_seen_by_isc, record_seen_by_you,category,alerts)
-            cache.set(domain,resp, hours_to_live=cache_expiration)
+            cache_resp = json_response(record_seen_by_web, record_seen_by_isc, record_seen_by_you,category,[])
+            cache.set(domain,cache_resp, hours_to_live=cache_expiration)
             log.debug("New Cache Entry!",cache.keys(), cache.cache_info())
             return resp
         else:
@@ -165,20 +166,20 @@ def domain_stats(domain):
             #if not expires and its doesn't expire for two years then its established.
             if isc_seen_by_web < (datetime.datetime.utcnow() - datetime.timedelta(days=365*2)):
                 category = "ESTABLISHED"
-            if isc_seen_by_isc == "FIRST-CONTACT":
-                alerts.append("ISC-FIRST-CONTACT")
-                isc_seen_by_isc = (datetime.datetime.utcnow()+datetime.timedelta(hours=config['timezone_offset']))
+            alerts.extend(isc_alerts)
             resp = json_response(isc_seen_by_web, isc_seen_by_isc, isc_seen_by_you, category, alerts )
             #Build a response just for the cache that stores ISC alerts for 24 hours. 
-            #alert.remove("YOUR-FIRST_CONTACT")
-            #alert.remove("ISC-FIRST-CONTACT")
-            #if alerts:
-            #   cache_expiration = 24     #Alerts are only cached for 24 hours
-            #else:
-            #   until_expires = datetime.datetime.utcnow() - isc_expires
-            #   cache_expiration = min( 720 , (until_expires.seconds//360))
-            #cache_response = json_response(isc_seen_by_web, isc_seen_by_isc, isc_seen_by_you, category, alerts )
-            #cache.set(domain, cache_response, cache_expiration)
+            if "YOUR-FIRST-CONTACT" in alerts:
+                alerts.remove("YOUR-FIRST-CONTACT")
+            if "ISC-FIRST-CONTACT" in alerts:
+                alerts.remove("ISC-FIRST-CONTACT")
+            if alerts:
+               cache_expiration = 24     #Alerts are only cached for 24 hours
+            else:
+               until_expires = datetime.datetime.utcnow() - isc_expires
+               cache_expiration = min( 720 , (until_expires.seconds//360))
+            cache_response = json_response(isc_seen_by_web, isc_seen_by_isc, isc_seen_by_you, category, alerts )
+            cache.set(domain, cache_response, cache_expiration)
             database.update_record(domain, isc_seen_by_web, isc_expires, isc_seen_by_isc, datetime.datetime.utcnow())
             return resp
 
@@ -236,16 +237,10 @@ else:
     log.setLevel(logging.DEBUG)
 
 software_version = 0.1
-database_version = config['database_version']
+database_version = database.version
 
 
 if __name__ == "__main__":
-    #try:
-    #   serverip = socket.gethostbyname(config.server_name)
-    ##except Exception as e:
-    #   print(f"Unable to resolve {config.server_name}") 
-    #   sys.exit(1)
-
     #Reload memory cache
     cache_file = pathlib.Path(config['memory_cache'])
     if cache_file.exists():
@@ -265,6 +260,7 @@ if __name__ == "__main__":
     print('Server is Ready. http://%s:%s/domain.tld' % (config['local_address'], config['local_port']))
     ready_to_exit = threading.Event()
     ready_to_exit.clear()
+
     health_thread = health_check()
     if not health_thread:
         sys.exit(1)

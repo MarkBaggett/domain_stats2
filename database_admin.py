@@ -13,7 +13,8 @@ import sys
 import database_io
 import network_io
 import config
-
+import expiring_cache
+import urllib
 
 def check_update():
     query = json.dumps({"action":"version"}).encode()
@@ -84,11 +85,6 @@ def get_updates(latest_version):
         config = update_config(database_version= version)
 
 if __name__ == "__main__":
-    config = config.config("domain_stats.yaml")
-    database = database_io.DomainStatsDatabase(config['database_file'])
-    server_config = network_io.get_server_config()
-
-
     parser=argparse.ArgumentParser()
     parser.add_argument('-f','--firstcontacts',action="store_true",required=False,help='Reset all domains to First-Contact on the local system (seen-by-me)')
     parser.add_argument('-c','--create',action="store_true",required=False,help='Create the specified database. (Erases and overwrites existing files.)')
@@ -98,14 +94,28 @@ if __name__ == "__main__":
  
     args = parser.parse_args()
 
-    if args.firstcontacts:
-        reset_first_contact()
-    elif args.create:
+    config = config.config("domain_stats.yaml")
+    database = database_io.DomainStatsDatabase(args.filename)
+    server_config = network_io.get_server_config()
+    cache = expiring_cache.ExpiringCache()
+
+
+    if args.create:
         if input("Are you sure?  This will destroy any existing file with that name.").lower().startswith("y"):
             database.create_file(args.filename)
-    elif args.update:
-        get_updates(check_update())
-    elif args.version:
-        print(f"Local Version:{config.database_version}  Server Version:{check_update()}")
+    if args.update:
+        critical, interval, messages = network_io.health_check(1.0, database.version, cache, database.stats)
+        if critical:
+            if messages[0] == 'UPDATE-DATABASE':
+                database.update_database(messages[1], config)
+    if args.firstcontacts:
+        reset_first_contact()
+    if args.version:
+        critical, interval, messages = network_io.health_check(1.0, database.version, cache, database.stats)
+        server_version = database.version
+        if critical:
+            if messages[0] == 'UPDATE-DATABASE':
+                server_version = messages[1]
+        print(f"Local Version:{database.version}  Server Version:{server_version}")
 
     

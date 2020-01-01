@@ -36,7 +36,7 @@ def health_check(client_version, database_version, cache, database_stats):
     #       Position 1 of Tuple is boolean representing "CRITICAL ERROR" which, when True causes the program to abort.
     #       a list of messages to give to the clients regarding its health and operating ability
     client_messages = []
-    fake_isc_response = json.dumps({"expected_database_version":1.0, "expected_client_version":1.0, "interval":5, "deny_client":"", "notice":['message1']})
+    fake_isc_response = json.dumps({"expected_database_version":1.1, "expected_client_version":1.0, "interval":5, "deny_client":"", "notice":['message1']})
     isc_response = json.loads(fake_isc_response)
     expected_database = isc_response.get("expected_database_version")
     if expected_database != database_version:
@@ -79,11 +79,14 @@ def retrieve_isc(domain):
     #    "seen_by_isc" = date when ISC first queried whoisxml to build this record in format YYYY-mm-DD HH:MM:SS,als
     #     "alerts"  =  A list of strings to make the user aware of regarding the domain in question (for later use) formta is ['alert1','alert2']
     ##STub an ISC response
+    fake_alerts = []
     fake_date1 = (datetime.datetime.now() - datetime.timedelta(days=random.randrange(365,3000))).replace(microsecond=0).isoformat().replace("T"," ")
-    fake_date1 = random.choice([fake_date1, "FIRST-CONTACT"])
+    if bool(random.getrandbits(1)):
+        fake_date1= datetime.datetime.utcnow()
+        fake_alerts = ['ISC-FIRST-CONTACT']
     fake_date2 = (datetime.datetime.now() - datetime.timedelta(days=random.randrange(365,3000))).replace(microsecond=0).isoformat().replace("T"," ")
     fake_date3 = (datetime.datetime.now() + datetime.timedelta(days=random.randrange(365,3000))).replace(microsecond=0).isoformat().replace("T"," ")
-    fake_isc_response1 = json.dumps({"seen_by_web":fake_date2, "expires":fake_date3, "seen_by_isc":fake_date1, "alerts":[]}, default=dateconverter)
+    fake_isc_response1 = json.dumps({"seen_by_web":fake_date2, "expires":fake_date3, "seen_by_isc":fake_date1, "alerts":fake_alerts}, default=dateconverter)
     #ISC can also generate Error responses and define how long the error is cached on the client (preventing repeated queries)
     #Those responses look like this:
     #{ "seen_by_web" = "ERROR",

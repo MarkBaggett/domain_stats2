@@ -3,6 +3,7 @@ import threading
 import datetime
 import logging
 import pathlib
+import urllib
 
 log = logging.getLogger(__name__)
 logfile = logging.FileHandler('domain_stats.log')
@@ -149,11 +150,11 @@ class DomainStatsDatabase(object):
         print("\r|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX| 100.00% FINISHED")
         return num_recs
 
-    def update_database(self, latest_version, config):
+    def update_database(self, latest_version,config):
         new_records_count = 0
         latest_major, latest_minor = map(int, str(latest_version).split("."))
-        current_major, current_minor = map(int, str(config['database_version']).split("."))
-        log.info(f"Updating from {current_version} to {latest_version}")
+        current_major, current_minor = map(int, str(self.version).split("."))
+        log.info(f"Updating from {self.version} to {latest_version}")
         if latest_major > current_major:
             log.info("WARNING: Domain Stats database is a major revision behind. Database required rebuild.")
             raise Exception("WARNING: Domain Stats database is a major revision behind. Database required rebuild.")
@@ -164,11 +165,11 @@ class DomainStatsDatabase(object):
             tgt_url = f"{config['target_updates']}/{current_major}/{update}.txt" 
             dst_path = pathlib.Path().cwd() / "data" / f"{current_major}" / f"{update}.txt"
             urllib.request.urlretrieve(tgt_url, str(dst_path))
-            new_records_count += process_update_file(str(dst_path))
+            new_records_count += self.process_update_file(str(dst_path))
         self.version = latest_version
         self.lastupdate = datetime.datetime.utcnow()
         db = sqlite3.connect(self.filename, timeout=15)
         cursor = db.cursor()
         cursor.execute("update info set version=?, lastupdate=?",(self.version, self.lastupdate))
         db.commit()
-        return latest_version, new_record_count
+        return latest_version, new_records_count
