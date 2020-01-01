@@ -60,41 +60,62 @@ $ wget -q -O- http://127.0.0.1:8000/stats
 CacheInfo(hits=7, misses=559, maxsize=65536, currsize=365, cache_bytes=38464, app_kbytes=26132)
 
 
-ISC API Specification
+# ISC API Specification
 API requests look like this
+```
 {"command":  <command>,  additional arguments depending upon command}
+```
 Valid COMMANDS include "CONFIG", "STATUS", and "QUERY"
 
-CONFIG command requests configuration options the ISC would like to enforce on the client
+
+
+### **CONFIG command requests configuration options the ISC would like to enforce on the client**
 request:
+```
 {"command": "config"}
-
+```
 response:
+```
 {"min_software_version": float,  "min_database_version", float, prohitited_tlds:["string1","string2"]}
+```
 - clients will not query ISC for Domains listed in prohibited_tlds.   Examples may be ['.local', '.arpa']
+- If min_software_version is higher than the client software version it causes the software to abort
+- if min_database_version is higher than database version it forces the client to download new domains to its local database
 
 
-STATUS command allows the clients to tell the ISC how they are doing and see if they can continue.  This can be used to tune client efficiency and reduce ISC requests.
+
+
+### **STATUS command allows the clients to tell the ISC how they are doing and see if they can continue.  This can be used to tune client efficiency and reduce ISC requests.**
 Request:
+```
 {"command":"status", "client_version":client_version, "database_version":database_version, "cache_efficiency":[cache.hits, cache.miss, cache.expire], "database_efficiency":[database_stats.hits, database_stats.miss]}
-
+```
 Response:
+```
 {"interval": "number of minutes ISC wishes to wait until next status update", "deny_client": "client message"}
+```
 interval: The inteval tells the client how many minutes to wait before sending another status updates
 deny_client: If set aborts the client with the specified message
 
 
-QUERY commmand allows clients to query a domain record.
-Requests:
-{"command": "query", "domain": "example.tld"}
 
+
+### **QUERY commmand allows clients to query a domain record.**
+Requests:
+```
+{"command": "query", "domain": "example.tld"}
+```
 RESPONSES (two possible):
-A success response looks like this:
+##### A success response looks like this:
+```
 {"seen_by_web": '%Y-%m-%d %H:%M:%S', "expires": '%Y-%m-%d %H:%M:%S', "seen_by_isc":'%Y-%m-%d %H:%M:%S', "alerts":['list','of','alerts]}
+```
    - Alerts must include "ISC-FIRST-CONTACT" if this is the first time anyone has ever queried ISC for this domain
    - Setting any additional alerts limits will display on the client when querying that domain for 24 hours and then go away.
-An error response looks like this:
+##### An error response looks like this:
+```
 {"seen_by_web":"ERROR", "expires":"ERROR", "seen_by_isc":<error time to live>, "alerts":['alerts','for','that','domain']}
+```
    - Error time to live tell the client how long to cache and reuse the error for that domain.
    - Integer > 0 - will cache the error for that many hours
    - 0 - will not cache the error at all
