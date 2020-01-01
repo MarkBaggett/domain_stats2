@@ -1,22 +1,7 @@
 #!/usr/bin/env python3
 #domain_stats.py by Mark Baggett
 #Twitter @MarkBaggett
-#x="""
-# GOAL is the followign records
-#{seen_by_web:datetime,    Comes from local for 100M ISC for everything else
-# seen_by_you: datetime    First seen by you
-# seen_by_isc: Position in Top 100M OR datetime first seen by ISC
-# Category: Established, NEW  
-# FirstContacts: YOU, ISC, BOTH
-# ISC_Other:  { }  Other alerts as provided by isc for this domain
-#}
-#database record
-#Rank will contain ISC date for >100M records
 
-#Cache Records ???   Just straight json answers or calculated?
-#Cache is straight JSON responses.  CAN NOT CACHE anything with FIRSTCONTACT
-# 
-# Delete expired records from the database
 
 import http.server
 import socketserver 
@@ -40,49 +25,29 @@ import pathlib
 import code
 import logging
 
-
 def dateconverter(o):
     if isinstance(o, datetime.datetime):
         return o.strftime("%Y-%m-%d %H:%M:%S")
-
 
 def health_check():
     #Contacts isc returns
     #   Messages to pass on to client  
     global health_thread    
     log.debug("Submit Health Check")
-    critical, interval, messages = network_io.health_check(software_version, database_version, cache, database.stats)
-    if critical:
-        if messages[0] == 'UPDATE-DATABASE':
-            database.update_database(messages[1], config)
-    critical, interval, messages = network_io.health_check(software_version, database_version, cache, database.stats)
-    if critical:
-        stop_msg = "Domain Stats will not start as a result of a critical error.\n"
-        stop_msg += "Please resolve the following error(s):\n"
-        stop_msg += "\n".join(messages)
-        print(stop_msg)
-        log.debug(stop_msg)
-    elif not ready_to_exit.is_set():
+    interval = isc_connection.get_status(software_version, database.version, cache, database.stats)
+    min_client, min_data = isc_connection.get_config()
+    if software_version < min_client:
+        log.info(f"The client software is out of date.  ISC lookups are disabled.  Update software to reenable this functionality.")
+        isc_connection.enabled=False
+    if database.version < min_data:
+        log.info(f"Database is out of date.  Forcing update from {database.version} to {min_data}")
+        database.update_database(min_data, config['target_updates'])
+    if interval:
         health_thread = threading.Timer(interval * 60, health_check)
         health_thread.start()
         return health_thread
     else:
         return None
-
-def retrieve_server_config():   
-    log.info("Retrieve server config")
-    submit_data = {"action":"config","database_version":database.version,"software_version":software_version}
-    resp_dict = None
-    try:
-        submit_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        submit_socket.settimeout(15)
-        submit_socket.sendto(json.dumps(submit_data,default=dateconverter).encode(), (config['server_name'],config['server_port']))
-        resp, addr = submit_socket.recvfrom(32768)
-        log.info(f"Server Provided Config {resp}")
-        resp_dict = json.loads(resp)
-    except Exception as e:
-        log.debug(f"Error retrieving server config {str(e)}")
-    return resp_dict
 
 def reduce_domain(domain_in):
     parts =  domain_in.strip().split(".")
@@ -99,12 +64,6 @@ def reduce_domain(domain_in):
         domain = ".".join(parts)
     log.debug(f"Trimmed domain from {domain_in} to {domain.lower()}")
     return domain.lower()
-
-def load_config():
-    with open("domain_stats.yaml") as fh:
-        yaml_dict = yaml.safe_load(fh.read())
-    Configuration = collections.namedtuple("Configuration", list(yaml_dict) )
-    return Configuration(**yaml_dict)
 
 def json_response(web,isc,you,cat,alert):
     return json.dumps({"seen_by_web":web,"seen_by_isc":isc, "seen_by_you":you, "category":cat, "alerts":alert},default=dateconverter).encode()
@@ -152,7 +111,7 @@ def domain_stats(domain):
             #if the ISC responds with an error put that in the cache
             alerts = ["YOUR-FIRST-CONTACT"]
             isc_seen_by_you = (datetime.datetime.utcnow()+datetime.timedelta(hours=config['timezone_offset']))
-            isc_seen_by_web, isc_expires, isc_seen_by_isc, isc_alerts = network_io.retrieve_isc(domain)
+            isc_seen_by_web, isc_expires, isc_seen_by_isc, isc_alerts = isc_connection.retrieve_isc(domain)
             #handle code if the ISC RETURNS AN ERROR HERE
             #Handle it.  Cache the error for some period of time.
             #If it isn't an error then its a new entry for the database (only) no cache
@@ -190,7 +149,7 @@ class domain_api(http.server.BaseHTTPRequestHandler):
         self.send_header('Content-type','text/plain')
         self.end_headers()
         (ignore, ignore, urlpath, urlparams, ignore) = urllib.parse.urlsplit(self.path)
-        if re.search("[\/][\w.]*", urlpath):
+        if re.search(r"[\/][\w.]*", urlpath):
             domain = re.search(r"[\/](.*)$", urlpath).group(1)
             #log.debug(domain)
             if domain == "stats":
@@ -219,32 +178,32 @@ class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
         self.exitthread.clear()
         http.server.HTTPServer.__init__(self, *args, **kwargs)
 
-config = config.config("domain_stats.yaml")
-cache = expiring_cache.ExpiringCache()
-database = database_io.DomainStatsDatabase(config['database_file'])
-
-log = logging.getLogger(__name__)
-logfile = logging.FileHandler('domain_stats.log')
-logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
-logfile.setFormatter(logformat)
-if config['log_detail'] == 0:
-    log.setLevel(level=logging.CRITICAL)
-elif config['log_detail'] == 1:
-    log.addHandler(logfile)
-    log.setLevel(logging.INFO)
-else:
-    log.addHandler(logfile)
-    log.setLevel(logging.DEBUG)
-
-software_version = 0.1
-database_version = database.version
 
 
 if __name__ == "__main__":
+    #Initialize the global variables
+    config = config.config("domain_stats.yaml")
+    cache = expiring_cache.ExpiringCache()
     #Reload memory cache
     cache_file = pathlib.Path(config['memory_cache'])
     if cache_file.exists():
         cache.cache_load(str(cache_file))    
+    database = database_io.DomainStatsDatabase(config['database_file'])
+    isc_connection = network_io.IscConnection()
+    software_version = 0.1
+
+    log = logging.getLogger(__name__)
+    logfile = logging.FileHandler('domain_stats.log')
+    logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
+    logfile.setFormatter(logformat)
+    if config['log_detail'] == 0:
+        log.setLevel(level=logging.CRITICAL)
+    elif config['log_detail'] == 1:
+        log.addHandler(logfile)
+        log.setLevel(logging.INFO)
+    else:
+        log.addHandler(logfile)
+        log.setLevel(logging.DEBUG)
 
     #Setup the server.
     start_time = datetime.datetime.utcnow()
@@ -259,14 +218,12 @@ if __name__ == "__main__":
     #start the server
     print('Server is Ready. http://%s:%s/domain.tld' % (config['local_address'], config['local_port']))
     ready_to_exit = threading.Event()
-    ready_to_exit.clear()
-
-    health_thread = health_check()
-    if not health_thread:
-        sys.exit(1)
-        
+    ready_to_exit.clear()        
     server_thread = threading.Thread(target=server.serve_forever)
     server_thread.daemon = True
+
+    #Schedule first health_check.  It reschedules itself as needed.
+    health_thread = health_check()
 
     try:
         server_thread.start()
@@ -278,7 +235,8 @@ if __name__ == "__main__":
         
     print("Web API Disabled...")
     print("Control-C hit: Exiting server.  Please wait..")
-    health_thread.cancel()
+    if health_thread:
+        health_thread.cancel()
     print("Commiting Cache to disk...")
     cache.cache_dump(config['memory_cache'])
 

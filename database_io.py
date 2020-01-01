@@ -59,6 +59,11 @@ class DomainStatsDatabase(object):
         datab.commit()
         self.version, self.created, self.last_update = new_info
 
+    def reset_first_contact(self):
+        db= sqlite3.connect(self.filename)
+        cursor = db.cursor()
+        cursor.execute("update domains set seen_by_you=?", ("FIRST-CONTACT",))
+        db.commit() 
 
     def update_record(self, domain, record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you):
         record_seen_by_web = record_seen_by_web.strftime('%Y-%m-%d %H:%M:%S')
@@ -153,7 +158,7 @@ class DomainStatsDatabase(object):
         print("\r|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX| 100.00% FINISHED")
         return num_recs
 
-    def update_database(self, latest_version,config):
+    def update_database(self, latest_version, update_url):
         new_records_count = 0
         latest_major, latest_minor = map(int, str(latest_version).split("."))
         current_major, current_minor = map(int, str(self.version).split("."))
@@ -165,7 +170,7 @@ class DomainStatsDatabase(object):
         for update in target_updates:
             version = f"{current_major}.{update}"
             log.info(f"Now applying update {version}")
-            tgt_url = f"{config['target_updates']}/{current_major}/{update}.txt" 
+            tgt_url = f"{update_url}/{current_major}/{update}.txt" 
             dst_path = pathlib.Path().cwd() / "data" / f"{current_major}" / f"{update}.txt"
             urllib.request.urlretrieve(tgt_url, str(dst_path))
             new_records_count += self.process_update_file(str(dst_path))

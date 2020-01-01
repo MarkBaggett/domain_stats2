@@ -96,7 +96,7 @@ class ExpiringCache(collections.OrderedDict, collections.Counter):
                     print("Unable to delete any keys but the maximum size is exceeded.  Ignoring Maxsize.")
                     break
                 else:
-                    expires,read_count,value = super().get(tgt_key)
+                    expires,_,_ = super().get(tgt_key)
                     if expires != -2:
                         del self[tgt_key]
                         entries = iter(self.keys())
@@ -150,8 +150,7 @@ class ExpiringCache(collections.OrderedDict, collections.Counter):
 def expiring_cache(maxsize=65535, cacheable = lambda _:True, hours_to_live=720):
     #Create my own lru cache so I can remove items as needed
     def wrap_function_with_cache(function_to_call):
-        _cache =  Expiring_Cache(hours_to_live=hours_to_live, cacheable=cacheable, maxsize=maxsize)
-
+        _cache =  ExpiringCache(hours_to_live=hours_to_live, cacheable=cacheable, maxsize=maxsize)
         def newfunc(*args):
             nonlocal _cache
             if args in _cache:
@@ -168,7 +167,7 @@ def expiring_cache(maxsize=65535, cacheable = lambda _:True, hours_to_live=720):
             return ret_val
 
         newfunc.cache = _cache
-        newfunc.reset_info = _cache.reset_info
+        newfunc.reset_stats = _cache.stats.reset
         newfunc.cache_dump = _cache.cache_dump
         newfunc.cache_load = _cache.cache_load
         newfunc.cache_info = _cache.cache_info
