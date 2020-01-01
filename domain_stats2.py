@@ -111,7 +111,7 @@ def json_response(web,isc,you,cat,alert):
 
 def domain_stats(domain):
     global cache
-    log.debug(f"New Request for domain {domain}.  Here is the cache info:", cache.keys(), cache.cache_info())
+    log.debug(f"New Request for domain {domain}.  Here is the cache info: {cache.keys()} {cache.cache_info()}")
     #First try to get it from the Memory Cache
     domain = reduce_domain(domain)
     log.debug(f"Is the domain in cache?  {domain in cache}")
@@ -145,7 +145,7 @@ def domain_stats(domain):
             resp = json_response(record_seen_by_web, record_seen_by_isc, record_seen_by_you,category,alerts)
             cache_resp = json_response(record_seen_by_web, record_seen_by_isc, record_seen_by_you,category,[])
             cache.set(domain,cache_resp, hours_to_live=cache_expiration)
-            log.debug("New Cache Entry!",cache.keys(), cache.cache_info())
+            log.debug(f"New Cache Entry! {cache.keys()} , {cache.cache_info()}")
             return resp
         else:
             #Your here so its not in the database look to the isc?

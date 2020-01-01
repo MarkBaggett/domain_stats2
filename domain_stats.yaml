@@ -1,7 +1,7 @@
 #This is the maximum number of items to hold in the memory cache 
 cached_max_items: 65536
 #This is the path to the sqlite database that contains the domain information
-database_file: mark2.db
+database_file: domain_stats.db
 #Mode=Use this to control how domain stats resolves hosts that are not in the database
 #Set to 0=Only Local Whois exec via cli,1=Only Local Whois via python,2=Whois Lookup central domain stats with local whois fallback
 mode: 2
