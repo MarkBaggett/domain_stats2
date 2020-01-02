@@ -2,7 +2,7 @@
 #domain_stats.py by Mark Baggett
 #Twitter @MarkBaggett
 
-
+import logging
 import http.server
 import socketserver 
 import expiring_cache
@@ -23,7 +23,7 @@ import functools
 import resource
 import pathlib
 import code
-import logging
+
 
 def dateconverter(o):
     if isinstance(o, datetime.datetime):
@@ -190,11 +190,11 @@ if __name__ == "__main__":
         cache.cache_load(str(cache_file))    
     database = database_io.DomainStatsDatabase(config['database_file'])
     isc_connection = network_io.IscConnection()
-    software_version = 0.1
+    software_version = 1.0
 
-    log = logging.getLogger(__name__)
+    log = logging.getLogger("domain_stats")
     logfile = logging.FileHandler('domain_stats.log')
-    logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
+    logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(module)s : %(message)s')
     logfile.setFormatter(logformat)
     if config['log_detail'] == 0:
         log.setLevel(level=logging.CRITICAL)
