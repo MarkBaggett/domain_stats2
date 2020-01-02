@@ -6,10 +6,7 @@ import pickle
 import threading
 import logging 
 
-log = logging.getLogger(__name__)
-logfile = logging.FileHandler('domain_stats.log')
-logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
-logfile.setFormatter(logformat)
+log = logging.getLogger("domain_stats")
 
 class cache_stats:
     def __init__(self,hit=0, miss=0, expire=0):
@@ -53,10 +50,12 @@ class ExpiringCache(collections.OrderedDict, collections.Counter):
         return rpt
 
     def cache_dump(self, fname):
+        log.debug(f"Dumping cache to file {fname}")
         with open(fname,"wb") as fhandle:
             pickle.dump(list(self.items()), fhandle, protocol=pickle.HIGHEST_PROTOCOL)
 
     def cache_load(self, fname):
+        log.debug(f"Loading cache from file {fname}")
         self.clear()
         with open(fname, "rb") as fhandle:
             other = pickle.load(fhandle)
@@ -109,8 +108,11 @@ class ExpiringCache(collections.OrderedDict, collections.Counter):
         """Setting hours_to_live to -1 and they won't expire but can page out if least recently used."""
         """Set to -2 and they do not expire and the LRU can not remove them. Permanent entries in the cache (use with caution)"""
         """Set to 0 and the record is treated as already expired. nothing is added to the cache"""
-        hours_to_live = hours_to_live or self.hours_to_live
+        log.debug(f"cache set called {key} {value} {hours_to_live}")
+        if hours_to_live == None:
+            hours_to_live = self.hours_to_live
         if hours_to_live == 0:
+            log.debug(f"hours to live set to zero.  Not caching. {key} {value}")
             return
         if hours_to_live < 0:
             expires = hours_to_live
