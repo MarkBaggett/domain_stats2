@@ -5,10 +5,7 @@ import datetime
 import logging
 
 
-log = logging.getLogger(__name__)
-logfile = logging.FileHandler('domain_stats.log')
-logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
-logfile.setFormatter(logformat)
+log = logging.getLogger("domain_stats")
 
 def dateconverter(o):
     if isinstance(o, datetime.datetime):
@@ -118,7 +115,9 @@ class IscConnection():
         #   "expires" = domain expiration date Date in format YYYY-mm-DD HH:MM:SS,  (if domain has multiple dates this is the most recent)
         #    "seen_by_isc" = date when ISC first queried whoisxml to build this record in format YYYY-mm-DD HH:MM:SS,als
         #     "alerts"  =  A list of strings to make the user aware of regarding the domain in question (for later use) formta is ['alert1','alert2']
-        ##STub an ISC response
+        ##Stub an ISC response
+        if not self.isc_enabled:
+            return ("ERROR","ERROR", 0, ['ISC Lookups disabled. See Log for details.'])
         fake_alerts = []
         fake_date1 = (datetime.datetime.now() - datetime.timedelta(days=random.randrange(365,3000))).replace(microsecond=0).isoformat().replace("T"," ")
         if bool(random.getrandbits(1)):
