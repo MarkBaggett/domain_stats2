@@ -62,7 +62,7 @@ class IscConnection():
         #functions returns tuple:
         #       Position 1 min client version
         #       Position 2 in min database version
-        fake_isc_response = json.dumps({"min_database_version":1.1, "min_client_version":1.0, "prohibited_tlds": ['.local','.arpa]']})
+        fake_isc_response = json.dumps({"min_database_version":1.2, "min_client_version":1.0, "prohibited_tlds": ['.local','.arpa]']})
         isc_response = json.loads(fake_isc_response)
         self.prohibited_tlds.extend(isc_response.get("prohibited_tlds", []))
         return isc_response.get("min_client_version"), isc_response.get("min_database_version")
