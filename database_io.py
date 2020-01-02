@@ -5,10 +5,7 @@ import logging
 import pathlib
 import urllib
 
-log = logging.getLogger(__name__)
-logfile = logging.FileHandler('domain_stats.log')
-logformat = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
-logfile.setFormatter(logformat)
+log = logging.getLogger("domain_stats")
 
   
 class database_stats:
