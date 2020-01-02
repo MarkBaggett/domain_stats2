@@ -183,6 +183,9 @@ class ThreadedDomainStats(socketserver.ThreadingMixIn, http.server.HTTPServer):
 if __name__ == "__main__":
     #Initialize the global variables
     config = config.config("domain_stats.yaml")
+    if not pathlib.Path(config['database_file']).exists():
+        print(f"Database specified in domain_stats.yaml not found. Try creating it by running:\n$python database_admin.py -cu {config['database_file']}")
+        sys.exit(1)
     cache = expiring_cache.ExpiringCache()
     #Reload memory cache
     cache_file = pathlib.Path(config['memory_cache'])
