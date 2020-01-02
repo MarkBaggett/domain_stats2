@@ -1,0 +1,7 @@
+domains/
+__pycache__/
+*.log
+*.db
+*.cache
+*.csv
+
