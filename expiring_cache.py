@@ -35,6 +35,10 @@ class ExpiringCache(collections.OrderedDict, collections.Counter):
         self.update_lock = threading.Lock()
         super().__init__()
 
+    def __contains__(self,*args,**kwargs):
+        log.info("Warning: __contains__ called with 'in' keyword.  This will likely skew your cache.stats.miss accuracy.  Instead just get() check for none being returned.")
+        return super().__contains__(*args,**kwargs)
+
     def cache_info(self):
         """JSON transmitable Report cache performance statistics"""
         rpt =  f"""{self.stats}, ('Max Size': {self.maxsize}, 'Current size': {len(self)}, 'Cache Bytes':{sys.getsizeof(self)}, 'Application Kilobytes':{resource.getrusage(resource.RUSAGE_SELF).ru_maxrss})"""
@@ -65,23 +69,25 @@ class ExpiringCache(collections.OrderedDict, collections.Counter):
 
     def get(self,key,default_value=None):
         retval = self[key]
-        return retval or default_value
+        if retval == None:
+            return default_value
+        return retval
+
 
     def __getitem__(self, key):
         if key in self:
-            #import pdb;pdb.set_trace()
             expiration, read_count, data = super().__getitem__(key)
             del self[key]
             #If it set to never expire or it is not expired then update the hit count and recreate the record.
             if (type(expiration)==int and expiration<0) or (type(expiration)==datetime.datetime and (expiration > datetime.datetime.utcnow())):
-                self.stats.hit +=1
+                self.stats.hit += 1
                 with self.update_lock:
                     super().__setitem__(key, (expiration, read_count+1, data))
                 return data
             else:
                 self.stats.expire += 1
         else:
-            self.stats.miss +=1
+            self.stats.miss += 1
         return None
 
     def enforce_size(self):
@@ -155,8 +161,8 @@ def expiring_cache(maxsize=65535, cacheable = lambda _:True, hours_to_live=720):
         _cache =  ExpiringCache(hours_to_live=hours_to_live, cacheable=cacheable, maxsize=maxsize)
         def newfunc(*args):
             nonlocal _cache
-            if args in _cache:
-                data = _cache.get(args)
+            data = _cache[args]
+            if data == None:
                 return data
             ret_val = function_to_call(*args)
             #check to see if this should be cached

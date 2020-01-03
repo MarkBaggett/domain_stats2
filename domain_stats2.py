@@ -73,12 +73,10 @@ def domain_stats(domain):
     log.debug(f"New Request for domain {domain}.  Here is the cache info: {cache.keys()} {cache.cache_info()}")
     #First try to get it from the Memory Cache
     domain = reduce_domain(domain)
-    log.debug(f"Is the domain in cache?  {domain in cache}")
-    if domain in cache:
-        cache_data =  cache.get(domain)
-        #Could still be None as expiration is only determined upon get()
-        if cache_data:
-            return cache_data
+    cache_data = cache.get(domain)
+    log.debug(f"Is the domain in cache?  {bool(cache_data)}")
+    if cache_data:
+        return cache_data
     #If it isn't in the memory cache check the database
     else:
         #import pdb;pdb.set_trace()
