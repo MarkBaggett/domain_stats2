@@ -58,9 +58,12 @@ class DomainStatsDatabase(object):
 
     def reset_first_contact(self):
         db= sqlite3.connect(self.filename)
+        log.info("Database_admin was used to reset all of the seen_by_you dates to FIRST-CONTACT")
+        print(f"Resetting all seen_by_you dates to FIRST-CONTACT.")
         cursor = db.cursor()
         cursor.execute("update domains set seen_by_you=?", ("FIRST-CONTACT",))
         db.commit() 
+        print(f"RESET! You probably want to also delete your .cache file at this time.")
 
     def update_record(self, domain, record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you):
         record_seen_by_web = record_seen_by_web.strftime('%Y-%m-%d %H:%M:%S')
@@ -80,6 +83,7 @@ class DomainStatsDatabase(object):
         return 1
 
     def delete_record(self, domain):
+        log.info("Deleting record from database for {}".format(domain))
         db = sqlite3.connect(self.filename, timeout=15)
         cursor = db.cursor()
         with self.lock:

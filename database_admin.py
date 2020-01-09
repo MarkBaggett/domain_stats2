@@ -1,20 +1,9 @@
-import sqlite3
-import yaml
-import collections
-import requests
 import argparse
-import json
-import socket
-import threading
 import pathlib
-import datetime
-import urllib
 import sys
 import database_io
 import network_io
 import config
-import expiring_cache
-import urllib
 
 
 if __name__ == "__main__":
@@ -29,23 +18,35 @@ if __name__ == "__main__":
 
     config = config.config("domain_stats.yaml")
     database = database_io.DomainStatsDatabase(args.filename)
-    cache = expiring_cache.ExpiringCache()
     isc_connection = network_io.IscConnection()
 
+    if args.filename != config.get("database_file"):
+        print(f"domain_stats.yaml uses database file :{config.get('database_file')}")
+        print(f"You have specified to use file {args.filename}")
 
     if args.create:
-        if input("Are you sure?  This will destroy any existing file with that name.").lower().startswith("y"):
-            database.create_file(args.filename)
+        if pathlib.Path(args.filename).exists():
+            if input("That filename already exists.  This will destroy it.  Continue? [Y/N] ").lower().startswith("y"):
+                database.create_file(args.filename)
+            else:
+                print("aborting.")
+                sys.exit(0)
         else:
-            print("aborting.")
-            sys.exit(0)
+            database.create_file(args.filename)
+
+    if not pathlib.Path(args.filename).exists:
+        print(f"The file {args.filename} does not exists.  Aborting")
+        sys.exit(1)
+
     if args.update:
         min_client, min_data = isc_connection.get_config()
         if database.version < min_data:
             print(f"Database is out of date.  Forcing update from {database.version} to {min_data}")
             database.update_database(min_data, config['target_updates'])
+
     if args.firstcontacts:
         database.reset_first_contact()
+
     if args.version:
         min_client, min_data = isc_connection.get_config()
         server_version = database.version
