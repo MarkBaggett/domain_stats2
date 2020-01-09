@@ -18,7 +18,6 @@ import re
 import json
 import sqlite3
 import config
-
 import functools
 import resource
 import pathlib
@@ -146,7 +145,7 @@ class domain_api(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type','text/plain')
         self.end_headers()
-        (ignore, ignore, urlpath, urlparams, ignore) = urllib.parse.urlsplit(self.path)
+        (_, _, urlpath, _, _) = urllib.parse.urlsplit(self.path)
         if re.search(r"[\/][\w.]*", urlpath):
             domain = re.search(r"[\/](.*)$", urlpath).group(1)
             #log.debug(domain)
@@ -182,12 +181,14 @@ if __name__ == "__main__":
     #Initialize the global variables
     config = config.config("domain_stats.yaml")
     if not pathlib.Path(config['database_file']).exists():
-        print(f"Database specified in domain_stats.yaml not found. Try creating it by running:\n$python database_admin.py -cu {config['database_file']}")
+        print(f"Database specified in domain_stats.yaml not found. Try creating it by running:\n$python database_admin.py --create --update {config['database_file']}")
         sys.exit(1)
     cache = expiring_cache.ExpiringCache()
     #Reload memory cache
     cache_file = pathlib.Path(config['memory_cache'])
     if cache_file.exists():
+        print(f"Cache Found!!. Reloading memory cache from previous run.")
+        print(f"If you do not wish to use the previous data then delete the cache by executing \"rm {config.get('database_file')}\" "")
         cache.cache_load(str(cache_file))    
     database = database_io.DomainStatsDatabase(config['database_file'])
     isc_connection = network_io.IscConnection()
@@ -228,8 +229,8 @@ if __name__ == "__main__":
 
     try:
         server_thread.start()
-        code.interact(local=locals())
-        #while True: time.sleep(100)
+        #code.interact(local=locals())
+        while True: time.sleep(100)
     except (KeyboardInterrupt, SystemExit):
         server.shutdown()
         server.server_close()
