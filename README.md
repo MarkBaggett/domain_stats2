@@ -95,8 +95,8 @@ Response:
 ```
 {"interval": "number of minutes ISC wishes to wait until next status update", "deny_client": "client message"}
 ```
-   - interval: The inteval tells the client how many minutes to wait before sending another status updates
-   - deny_client: If set aborts the client with the specified message
+- interval: The inteval tells the client how many minutes to wait before sending another status updates
+- deny_client: If set aborts the client with the specified message
 
 
 
