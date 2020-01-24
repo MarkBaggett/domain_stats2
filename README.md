@@ -2,10 +2,10 @@
 
 ATTENTION:    THIS CODE BASE IS CURRENTLY BROKEN!!
 
-I have some exciting news.  The SANS isc is providing some funding and will pay for whois API access.   This improves the data quality and reliability but it completely changes the way I access the data.  This requires a significant rewrite.  This is in a transitional state right now as I move from the old to the new. 
+But I have some exciting news.  The SANS isc is providing some funding and will pay for whois API access.   This improves the data quality and reliability but it completely changes the way I access the data.  This requires a significant rewrite.  This is in a transitional state right now as I move from the old to the new. 
 
 
-This is a complete rewrite and new approach to managing baby domains in your organization.  Based on feedback from the community Domain_stats was really only used for baby domain information.  This new iteration focuses on that data and how to make it useful.  In this process it now tracks "FIRST CONTACT" so you know when your organization is has contacted a domain that you have not seen before.
+This is a complete rewrite and new approach to managing baby domains in your organization.  Based on feedback from the community Domain_stats was really only used for baby domain information.  This new iteration focuses on that data and how to make it useful.  In this process it now tracks "FIRST CONTACT" so you know when your organization and/or the ISC has seen that domain before.
 
 The domain stats client is focused on quickly giving you 5 pieces of data for every domain name you ask it for.  That is when the domain was first seen by you, when it was first seen by the security community and when it was first seen by the web.
 
@@ -38,7 +38,7 @@ Lets look at another domain.  Look at markbaggett.com.
 student@573:~/Documents/domain_stats2$ wget -q -O- http://127.0.0.1:8000/markbaggett.com
 {"seen_by_web": "2015-12-12 19:34:59", "seen_by_isc": "2019-06-08 10:03:17", "seen_by_you":"2019-06-08 10:03:17", "category": "ESTABLISHED", "alerts": ['YOUR-FIRST-CONTACT'] 
 ```
-The domain markbaggett.com wasn't in the local database on my server so it had to go off and ask the SANS Internet Storm Center server for that information. It got back a "seen_by_web" date of 12-12-2015.  This is the domains registration date. The category indicates that this is an "ESTABLISHED" domain.  It will probably be added to the client database for all future queries.  Notice there is a date for "seen_by_isc".  That is the first time ANYONE using domain_stats queried the central server for that domain. Someone using domain stats ask about that domain that back on July 8th. That is a few months ago so it isn't brand new to the community. If no one using domain stats had ever asked about that domain there would have been an additional alert that says "ISC-FIRST-CONTACT". Last we can see it is again the YOUR-FIRST-CONTACT alert for our organization.   
+The domain markbaggett.com wasn't in the local database on my server so it had to go off and ask the SANS Internet Storm Center server for that information. It got back a "seen_by_web" date of 12-12-2015.  This is the domains registration date. The category indicates that this is an "ESTABLISHED" domain.  It will added to the client database for all future queries unless any additional alerts were set by the ISC. Domains that have an alert associated with them will be cached for 24 hours. Then another query will be sent to the ISC.  This process is repeated until the isc alert for that domain is cleared.  Notice there is a date for "seen_by_isc".  That is the first time ANYONE using domain_stats queried the central server for that domain. Someone using domain stats ask about that domain that back on July 8th. That is a few months ago so it isn't brand new to the community. If no one using domain stats had ever asked about that domain there would have been an additional alert that says "ISC-FIRST-CONTACT". Last we can see it is again the YOUR-FIRST-CONTACT alert for our organization.   
 
 A domain with a very recent "seen_by_web", "seen_by_isc" and "seen_by_you" date should be investigated. The vast majority of domains have been around for a few years before they are stable and gain popularity.  Domains used by attackers are usually established shortly before they are used. 
 
@@ -65,7 +65,7 @@ Will dump the cache
 # ISC API Specification
 API requests look like this
 ```
-{"command":  <command>,  additional arguments depending upon command}
+{"command":  <command string>,  additional arguments depending upon command}
 ```
 Valid COMMANDS include "CONFIG", "STATUS", and "QUERY"
 
@@ -78,11 +78,11 @@ request:
 ```
 response:
 ```
-{"min_software_version": float,  "min_database_version", float, prohitited_tlds:["string1","string2"]}
+{"min_software_version": "major.minor string",  "min_database_version", "major.minor string", prohitited_tlds:["string1","string2"]}
 ```
 - clients will not query ISC for Domains listed in prohibited_tlds.   Examples may be ['.local', '.arpa']
 - If min_software_version is higher than the client software version it causes the software to abort
-- if min_database_version is higher than database version it forces the client to download new domains to its local database
+- if min_database_version is higher than database version it forces the client to download new domains from github.com/markbaggett and add it to its local database
 
 
 
@@ -93,14 +93,14 @@ Request:
 ```
 Response:
 ```
-{"interval": "number of minutes ISC wishes to wait until next status update", "deny_client": "client message"}
+{"interval": "integer number of minutes ISC wishes to wait until next status update", "deny_client": "client message string"}
 ```
-- interval: The inteval tells the client how many minutes to wait before sending another status updates
+- interval: The interval tells the client how many minutes to wait before sending another status updates
 - deny_client: If set aborts the client with the specified message
 
 
 
-### **QUERY commmand allows clients to query a domain record.**
+### **QUERY command allows clients to query a domain record.**
 Requests:
 ```
 {"command": "query", "domain": "example.tld"}
@@ -119,11 +119,12 @@ RESPONSES (two possible):
 ##### An error response looks like this:
 
 ```
-{"seen_by_web":"ERROR", "expires":"ERROR", "seen_by_isc":<error time to live>, "alerts":['alerts','for','that','domain']}
+{"seen_by_web":"ERROR", "expires":"ERROR", "seen_by_isc":<integer specifying cache time to live>, "alerts":['alerts','for','that','domain']}
 ```
+   - seen_by_web and expires must be set to "ERROR" when an error has occured.
    - Error time to live tell the client how long to cache and reuse the error for that domain.
    - Integer > 0 - will cache the error for that many hours
    - 0 - will not cache the error at all
    - -1 - will cache it such that it does not expire, but the domain can still drop out of cache based on LRU algorithm
-   - -2 - permanent cache entry.  Will never expire.  DANGEROUS. Use with caution.
+   - -2 - PERMANENT cache entry.  Will never expire.  DANGEROUS. Use with caution.
     
