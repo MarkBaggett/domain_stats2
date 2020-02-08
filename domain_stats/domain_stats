@@ -25,6 +25,7 @@ import include.expiring_cache as expiring_cache
 import include.database_io as database_io
 import include.network_io as network_io
 import include.config as config
+import include.rdap_query as rdap
 import collections
 import sys
 import datetime
@@ -119,6 +120,33 @@ def domain_stats(domain):
             cache.set(domain,cache_resp, hours_to_live=cache_expiration)
             log.debug(f"New Cache Entry! {cache.keys()} , {cache.cache_info()}")
             return resp
+        elif config.get("mode")=="rdap":
+            alerts = ["YOUR-FIRST-CONTACT"]
+            rdap_seen_by_you = (datetime.datetime.utcnow()+datetime.timedelta(hours=config['timezone_offset']))
+            rdap_seen_by_web, rdap_expires, rdap_error = rdap.get_domain_record(domain)
+            if rdap_seen_by_web == "ERROR":
+                cache_expiration = 1
+                if rdap_error:
+                    alerts.append(rdap_error)
+                #FIXME Include FIRSTCONTACT in resp but not cacher
+                resp = json_response("ERROR","ERROR","ERROR","ERROR",alerts)
+                cache_resp = json_response("ERROR","ERROR","ERROR","ERROR",[rdap_error])
+                cache.set(domain, cache_resp, hours_to_live=cache_expiration)
+                return resp
+            category = "NEW"
+            #if not expires and its doesn't expire for two years then its established.
+            if rdap_seen_by_web < (datetime.datetime.utcnow() - datetime.timedelta(days=365*2)).replace(tzinfo=datetime.timezone.utc):
+                category = "ESTABLISHED"
+            resp = json_response(rdap_seen_by_web, "RDAP", rdap_seen_by_you, category, alerts )
+            #Build a response just for the cache that stores ISC alerts for 24 hours. 
+            if "YOUR-FIRST-CONTACT" in alerts:
+                alerts.remove("YOUR-FIRST-CONTACT")
+            until_expires = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc) - rdap_expires
+            cache_expiration = min( 720 , (until_expires.seconds//360))
+            cache_response = json_response(rdap_seen_by_web, "RDAP", rdap_seen_by_you, category, alerts )
+            cache.set(domain, cache_response, cache_expiration)
+            database.update_record(domain, rdap_seen_by_web, rdap_expires, "RDAP", datetime.datetime.utcnow())
+            return resp 
         else:
             #Your here so its not in the database look to the isc?
             #if the ISC responds with an error put that in the cache
@@ -204,7 +232,7 @@ if __name__ == "__main__":
     cache_file = pathlib.Path(config['memory_cache'])
     if cache_file.exists():
         print(f"Cache Found!!. Reloading memory cache from previous run.")
-        print(f"If you do not wish to use the previous data then delete the cache by executing \"rm {config.get('database_file')}\" ")
+        print(f"If you do not wish to use the previous data then delete the cache by executing \"rm {config.get('memory_cache')}\" ")
         cache.cache_load(str(cache_file))    
     database = database_io.DomainStatsDatabase(config['database_file'])
     isc_connection = network_io.IscConnection()

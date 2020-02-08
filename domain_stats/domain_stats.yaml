@@ -25,3 +25,5 @@ timezone_offset: 0
 #Control detail in logging 
 #0=off, 1=on, 2=debug
 log_detail: 2
+#Mode can be isc or rdap
+mode: rdap

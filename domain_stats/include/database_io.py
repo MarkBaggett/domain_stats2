@@ -68,7 +68,7 @@ class DomainStatsDatabase(object):
     def update_record(self, domain, record_seen_by_web, record_expires, record_seen_by_isc, record_seen_by_you):
         record_seen_by_web = record_seen_by_web.strftime('%Y-%m-%d %H:%M:%S')
         record_expires = record_expires.strftime('%Y-%m-%d %H:%M:%S')
-        if record_seen_by_isc != "LOCAL":
+        if record_seen_by_isc != "LOCAL" and record_seen_by_isc != "RDAP":
             record_seen_by_isc = record_seen_by_isc.strftime('%Y-%m-%d %H:%M:%S')
         if record_seen_by_you != "FIRST-CONTACT":
             record_seen_by_you = record_seen_by_you.strftime('%Y-%m-%d %H:%M:%S')
